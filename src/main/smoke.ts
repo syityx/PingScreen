@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import type { HelperEvent } from '../shared/protocol';
 import type { CardState, Point, StageState, TranslationMode } from '../shared/types';
 import type { SettingsStore } from './settings';
+import { version } from '../../package.json';
 interface SmokeSession { id: string; card?: CardState; stage?: StageState; origin: Point; wheelCenter: Point; release?: Point; translationMode: TranslationMode }
 interface Harness { handle(event: HelperEvent): void; getSession(): SmokeSession | undefined; getSettings(): BrowserWindow | undefined; getCard(): BrowserWindow | undefined; getStage(): BrowserWindow | undefined; store: SettingsStore; closeSession(): void }
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -74,7 +75,8 @@ export async function runSmoke(h: Harness): Promise<void> {
         appText:document.querySelector('[data-section=app]').textContent,
         link:document.querySelector('.copyright a')?.getAttribute('href')};
     })()`);
-    if(!compact.natural||compact.gaps.some((gap:number)=>gap>33)||JSON.stringify(compact.about)!==JSON.stringify(['pingscreen 0.1.4','Windows 桌面 AI 助手 · UI Demo'])||compact.appText.includes('当前会话，不保存历史')||compact.link!=='https://github.com/darrenprx/lolPing') throw new Error('Compact settings / trimmed about / project link failed: '+JSON.stringify(compact));
+    if(!compact.natural||compact.gaps.some((gap:number)=>gap>33)||JSON.stringify(compact.about)!==JSON.stringify([`pingscreen ${version}`,'Windows 桌面 AI 助手'])||compact.appText.includes('当前会话，不保存历史')||compact.link!=='https://github.com/darrenprx/lolPing') throw new Error('Compact settings / release identity / project link failed: '+JSON.stringify(compact));
+    if((await settings.webContents.executeJavaScript(`document.querySelector('.sidebar-help').textContent`)).includes('UI Demo')) throw new Error('Release sidebar still shows Demo');
     const originalOpenExternal=shell.openExternal, openedLinks:string[]=[];
     shell.openExternal=async(url:string)=>{openedLinks.push(url);};
     try {

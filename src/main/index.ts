@@ -279,7 +279,7 @@ function start(): void {
     return !!session && sender === stages.get(session.display.id)?.webContents;
   }
   ipcMain.handle('pingscreen:init', event => {
-    if (authorized(event.sender, 'settings')) return { role: 'settings', settings: store.public(), status: { helper: bridge.status, enabled } };
+    if (authorized(event.sender, 'settings')) return { role: 'settings', demo: DEMO, settings: store.public(), status: { helper: bridge.status, enabled } };
     if (authorized(event.sender, 'card')) return { role: 'card', card: session?.card ?? null };
     if ([...stages.values()].some(win => win.webContents === event.sender)) return { role: 'stage', stage: session?.stage ?? null };
     throw new Error('未知窗口。');

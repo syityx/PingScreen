@@ -11,7 +11,7 @@
   </p>
   <p>
     <img src="https://img.shields.io/badge/平台-Windows_x64-167a86" alt="平台：Windows x64" />
-    <img src="https://img.shields.io/badge/版本-0.1.4_UI_Demo-2878e8" alt="版本：0.1.4 UI Demo" />
+    <img src="https://img.shields.io/badge/版本-0.1.5-2878e8" alt="版本：0.1.5" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/许可-MIT-52616b" alt="许可：MIT" /></a>
   </p>
   <img src="docs/media/wheel-white.png" width="920" alt="白色图标轮盘：滚轮切换翻译点／条模式" />
@@ -21,17 +21,17 @@
 
 面向 **Windows x64**，目前主要在 Windows 11 上验证。
 
-**0.1.4 本次仅提供 UI Demo：** 解压 `release/demo/pingscreen-Demo-0.1.4.zip`，运行 `pingscreen.exe`。启动前从托盘退出旧版。Demo 使用 `%APPDATA%\pingscreen-demo` 独立设置，首次需配置模型，不会改动已安装版配置。完整测试说明包含在压缩包内。
+**当前正式版 0.1.5：** 已整合 0.1.4 Demo 的完整界面与设置交互，安装包位于 `release/pingscreen-Setup-0.1.5.exe`。
 
-此前安装版的使用方式：
-
-1. 运行 `pingscreen-Setup-<版本号>.exe` 完成安装。本地当前安装包位于 `release/pingscreen-Setup-0.1.2.exe`。
+1. 运行 `pingscreen-Setup-0.1.5.exe` 完成安装。
 2. 打开应用，填写服务地址、模型名称和 API Key。模型需支持 **图片输入的 Chat Completions 兼容接口**；不要求鉴权的本地服务可留空密钥。
-3. 当前 Demo 点击 **「测试连接」** 检查填写内容，再点击 **「保存」** 保存模型配置。测试不会自动保存。此前安装版使用「保存并测试连接」。应用常驻系统托盘。
+3. 点击 **「测试连接」** 检查填写内容，再点击 **「保存」** 保存模型配置。测试不会自动保存。应用常驻系统托盘。
 
 服务地址填写基础地址（如 `https://your-provider.example/v1`）或完整的 `/chat/completions` 地址。连接测试使用生成的图片，不上传桌面。
 
 更新时先从托盘退出旧版，再安装到原目录，模型设置会保留。
+
+正式版沿用 `%APPDATA%\pingscreen`；Demo 的 `%APPDATA%\pingscreen-demo` 配置独立。仅用过 Demo 的用户请在正式版重新配置模型。
 
 ## 使用
 
@@ -101,14 +101,16 @@ npm run dev
 | `npm run test:helper` | 原生输入与 HDR 颜色测试 |
 | `npm run smoke` | 使用生成画面和模拟模型验证完整流程 |
 | `npm run dist` | 生成 Windows x64 安装包，输出至 `release/` |
+| `npm run verify:release` | 检查正式版归档、原生助手和安装包完整性，并生成 SHA-256 校验文件 |
+| `npm run demo` | 单独构建隔离配置的 Demo ZIP |
 
-详细测试范围、性能记录和待验证项见 [0.1.2 验证记录](docs/verification/0.1.2.md)。
+当前正式版检查见 [0.1.5 验证记录](docs/verification/0.1.5.md)，此前性能记录见 [0.1.2 验证记录](docs/verification/0.1.2.md)。
 
 </details>
 
 ## 开发文档
 
-[文档目录](docs/README.md) · [版本变化](docs/changelog.md) · [屏幕聚焦计划](docs/plans/2026-10-14-screen-focus.md)
+[文档目录](docs/README.md) · [版本变化](docs/changelog.md) · [Git 与发布流程](docs/versioning.md) · [屏幕聚焦计划](docs/plans/2026-10-14-screen-focus.md)
 
 ## 致谢与许可
 

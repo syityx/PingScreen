@@ -1,4 +1,4 @@
-pingscreen 0.1.4 · 白色 UI Demo · Windows x64
+pingscreen 0.1.5 · UI Demo · Windows x64
 
 解压整个压缩包到任意文件夹，双击 pingscreen.exe。无需安装。
 启动前请先在系统托盘退出旧版 pingscreen，避免两个版本同时识别手势。
