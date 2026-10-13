@@ -1,10 +1,11 @@
 # pingscreen 开发文档
 
-当前版本：0.1.5 正式版（整合 0.1.4 UI Demo）。
+当前版本：0.1.6 正式版（新 Logo 与 GitHub 自动构建发布）。
 
 - [版本变化](changelog.md)
 - [Git 与发布流程](versioning.md)
 - [GitHub 入库隐私检查](security-review.md)
+- [0.1.6 正式版验证记录](verification/0.1.6.md)
 - [0.1.5 正式版验证记录](verification/0.1.5.md)
 - [屏幕聚焦开发计划](plans/2026-10-14-screen-focus.md)
 - [设置与快捷操作开发计划](plans/2026-10-14-settings-and-shortcuts.md)

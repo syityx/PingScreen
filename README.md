@@ -1,6 +1,6 @@
 <div align="center">
   <img src="docs/media/logo.png" width="180" alt="pingscreen 图标" />
-  <p><strong>pingscreen 哪里不会点哪里</strong></p>
+  <p><strong>PingScreen 哪里不会点哪里</strong></p>
   <p>指向屏幕上的文字、按钮、图片或图表，让 AI 解释、翻译、改写，或回答你的问题。<br />按住 <strong>Alt + 鼠标左键</strong>，拖向一个意图，松开即可。</p>
   <p>
     <a href="#安装">安装</a> ·
@@ -10,7 +10,7 @@
   </p>
   <p>
     <img src="https://img.shields.io/badge/平台-Windows_x64-167a86" alt="平台：Windows x64" />
-    <img src="https://img.shields.io/badge/版本-0.1.5-2878e8" alt="版本：0.1.5" />
+    <img src="https://img.shields.io/badge/版本-0.1.6-2878e8" alt="版本：0.1.6" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/许可-MIT-52616b" alt="许可：MIT" /></a>
   </p>
   <img src="docs/media/demo.gif" width="920" alt="pingscreen 实际操作演示" />
@@ -20,7 +20,7 @@
 
 当前支持 **Windows x64**，主要在 Windows 11 环境下验证。
 
-1. 从本仓库的 **Releases** 页面获取 `pingscreen-Setup-<版本号>.exe`，运行安装程序。
+1. 从 [最新正式版](https://github.com/syityx/PingScreen/releases/latest) 获取 `pingscreen-Setup-<版本号>.exe`，运行安装程序。
 2. 打开 pingscreen，填写模型服务地址、模型名称和 API Key。
 3. 点击 **「测试连接」**，确认连接成功后点击 **「保存」**，然后回到桌面开始使用。
 
@@ -69,13 +69,6 @@
 - **应用：** 可设置开机启动，启动后常驻系统托盘。
 
 手势、轮盘和开机启动修改后会自动保存。键盘触发键配合左键拖动；鼠标侧键直接按住拖动。右键托盘图标可暂停、恢复、重启输入助手或退出应用。
-
-<details>
-<summary>查看设置界面</summary>
-
-<p align="center"><img src="docs/media/settings.png" width="820" alt="模型连接与手势设置，截图中的模型服务仅为示例" /></p>
-
-</details>
 
 ## 隐私与数据
 

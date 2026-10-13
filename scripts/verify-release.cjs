@@ -19,6 +19,24 @@ for (const relative of ['out/main/index.js', 'out/preload/index.js', 'out/render
   assert(read(name).equals(fs.readFileSync(path.join(root, name))), `Outdated ${relative}`);
 }
 const files = asar.listPackage(archive).map(name => name.slice(1));
+const normalized = files.map(name => name.replaceAll('\\', '/'));
+let dependencyCount = 0;
+for (const metadataFile of normalized.filter(name => /^node_modules\/(?:@[^/]+\/)?[^/]+\/package\.json$/.test(name))) {
+  const dependency = JSON.parse(read(path.join(...metadataFile.split('/'))).toString('utf8'));
+  const directory = metadataFile.slice(0, -'package.json'.length);
+  const notices = normalized.filter(name => name.startsWith(directory) && /^(?:licen[sc]e|copying)(?:\.[^/]+)?$/i.test(name.slice(directory.length)));
+  assert(notices.length > 0, `Missing license for ${dependency.name}`);
+  for (const notice of notices) assert(read(path.join(...notice.split('/'))).length > 0, `Empty ${notice}`);
+  dependencyCount++;
+}
+assert(dependencyCount > 0, 'No runtime dependency licenses checked');
+for (const notice of ['LICENSE.electron.txt', 'LICENSES.chromium.html']) {
+  assert(fs.statSync(path.join(unpacked, notice)).size > 0, `Missing ${notice}`);
+}
+const thirdParty = fs.readFileSync(path.join(root, 'THIRD_PARTY_LICENSES.txt'), 'utf8');
+assert(thirdParty.includes('Copyright (c) 2026 Danrui Meng'), 'Missing lolPing copyright');
+assert(thirdParty.includes('Permission is hereby granted, free of charge'), 'Missing upstream MIT permission');
+assert(thirdParty.includes('THE SOFTWARE IS PROVIDED "AS IS"'), 'Missing upstream MIT disclaimer');
 for (const name of files.filter(name => name.startsWith(path.join('out', 'renderer', 'assets')) && /\.(css|js|png|svg|ico)$/.test(name))) {
   assert(read(name).equals(fs.readFileSync(path.join(root, name))), `Outdated renderer ${name}`);
 }
@@ -40,5 +58,5 @@ const checksums = [installerName, `${installerName}.blockmap`].map(name => {
   return `${crypto.createHash('sha256').update(data).digest('hex')}  ${name}\n`;
 }).join('');
 fs.writeFileSync(path.join(output, `SHA256SUMS-${pkg.version}.txt`), checksums);
-console.log(`Release ${pkg.version} verified: formal identity, current code/helpers, licenses, guide and installer integrity.`);
+console.log(`Release ${pkg.version} verified: formal identity, current code/helpers, ${dependencyCount} dependency licenses, Electron/Chromium notices, guide and installer integrity.`);
 console.log('SHA-256 checksums written for installer and blockmap.');

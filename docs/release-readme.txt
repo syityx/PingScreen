@@ -1,7 +1,7 @@
-pingscreen 0.1.5 · Windows x64 正式版
+pingscreen 0.1.6 · Windows x64 正式版
 
 安装与升级
-运行 pingscreen-Setup-0.1.5.exe，按提示完成安装。
+运行 pingscreen-Setup-0.1.6.exe，按提示完成安装。
 更新前从系统托盘退出旧版 pingscreen / Demo，再安装到原目录。
 正式版沿用 %APPDATA%\pingscreen 的已有配置。
 Demo 的 %APPDATA%\pingscreen-demo 目录独立；仅用过 Demo 的用户请在正式版重新填写模型配置。
