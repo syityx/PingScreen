@@ -1,0 +1,60 @@
+{
+  "colors": {
+    "surface": "#FFFFFF",
+    "canvas": "#F7F8FA",
+    "sidebar": "#F1F3F6",
+    "border": "#E6E9EE",
+    "textPrimary": "#242A35",
+    "textSecondary": "#687385",
+    "textTertiary": "#8C96A5",
+    "accent": "#2878E8",
+    "accentSoft": "#ECF3FF",
+    "success": "#26845B",
+    "successSoft": "#EAF6F0",
+    "warning": "#AD6A15",
+    "warningSoft": "#FFF5E7"
+  },
+  "spacing": [
+    2,
+    4,
+    8,
+    12,
+    16,
+    20,
+    24,
+    32
+  ],
+  "radius": {
+    "control": 8,
+    "card": 12,
+    "answer": 16
+  },
+  "typography": {
+    "Chinese": "Noto Sans SC",
+    "Latin": "Inter",
+    "sizes": [
+      10,
+      11,
+      12,
+      14,
+      16,
+      20,
+      28,
+      32
+    ]
+  },
+  "wheel": {
+    "canvas": 256,
+    "outerRadius": 116,
+    "deadZoneRadius": 33,
+    "iconRadius": 77,
+    "iconSize": 24,
+    "order": [
+      "explain",
+      "translate",
+      "rewrite",
+      "custom",
+      "region"
+    ]
+  }
+}

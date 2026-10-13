@@ -1,0 +1,7 @@
+node_modules/
+out/
+release/
+native/hook-helper/build/
+*.log
+.env*
+.tools/

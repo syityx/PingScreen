@@ -1,0 +1,31 @@
+import React from 'react';
+import explain from './assets/icons/explain.svg';
+import translate from './assets/icons/translate.svg';
+import rewrite from './assets/icons/rewrite.svg';
+import custom from './assets/icons/custom.svg';
+import region from './assets/icons/region.svg';
+import cursor from './assets/icons/cursor.svg';
+import model from './assets/icons/model.svg';
+import settings from './assets/icons/settings.svg';
+import power from './assets/icons/power.svg';
+import keyboard from './assets/icons/keyboard.svg';
+import mouse from './assets/icons/mouse.svg';
+import scroll from './assets/icons/scroll.svg';
+import shield from './assets/icons/shield.svg';
+import check from './assets/icons/check.svg';
+import close from './assets/icons/close.svg';
+import chevron from './assets/icons/chevron.svg';
+import copy from './assets/icons/copy.svg';
+import send from './assets/icons/send.svg';
+import stop from './assets/icons/stop.svg';
+import eye from './assets/icons/eye.svg';
+import refresh from './assets/icons/refresh.svg';
+import info from './assets/icons/info.svg';
+import move from './assets/icons/move.svg';
+import link from './assets/icons/link.svg';
+import logo from './assets/icons/logo.svg';
+const icons = { explain, translate, rewrite, custom, region, cursor, model, settings, power, keyboard, mouse, scroll, shield, check, close, chevron, copy, send, stop, eye, refresh, info, move, link, logo };
+export type IconName = keyof typeof icons;
+export function Icon({ name, size = 20, className = '' }: { name: IconName; size?: number; className?: string }): React.JSX.Element {
+  return <span aria-hidden="true" className={`icon ${className}`} style={{ width: size, height: size, maskImage: `url("${icons[name]}")` }} />;
+}
