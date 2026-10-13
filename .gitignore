@@ -5,3 +5,17 @@ native/hook-helper/build/
 *.log
 .env*
 .tools/
+
+# Local model configuration, credentials and diagnostic dumps.
+settings.json*
+*.pem
+*.key
+*.p12
+*.pfx
+*.dmp
+*.dump
+
+# Original exports, draft logos and obsolete Demo materials stay local.
+docs/design/PingScreen-assets/
+docs/design/logo-concepts/
+docs/archive/demo/

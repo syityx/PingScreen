@@ -1,0 +1,118 @@
+name: Windows build and release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  # Manual builds provide a test installer as an Actions artifact; no public release.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate version and tag
+        id: version
+        shell: bash
+        run: |
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const pkg = require('./package.json');
+          const lock = require('./package-lock.json');
+          assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
+          assert.equal(lock.version, pkg.version, 'Lockfile version mismatch');
+          assert.equal(lock.packages[''].version, pkg.version, 'Lockfile root version mismatch');
+          if (process.env.GITHUB_EVENT_NAME === 'push') {
+            assert.equal(process.env.GITHUB_REF_NAME, `v${pkg.version}`, 'Tag must match package.json');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${pkg.version}\n`);
+          NODE
+      - name: Scan source history for credentials (redacted output)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:RUNNER_TEMP 'gitleaks.zip'
+          $destination = Join-Path $env:RUNNER_TEMP 'gitleaks'
+          Invoke-WebRequest 'https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_windows_x64.zip' -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'd29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e') {
+            throw 'Gitleaks download checksum mismatch'
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $destination
+          & (Join-Path $destination 'gitleaks.exe') git --redact=100 --no-banner --log-opts=--all
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run: npm ci
+      - name: Generate the approved product logo
+        run: npm run build:brand
+      - run: npm run typecheck
+      - run: npm run test:helper
+      - run: npm test
+      - run: npm run dist
+      - run: npm run verify:release
+      - name: Preserve only distributable files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: pingscreen-windows-${{ steps.version.outputs.version }}
+          path: |
+            release/pingscreen-Setup-${{ steps.version.outputs.version }}.exe
+            release/pingscreen-Setup-${{ steps.version.outputs.version }}.exe.blockmap
+            release/SHA256SUMS-${{ steps.version.outputs.version }}.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: pingscreen-windows-${{ needs.windows.outputs.version }}
+          path: release
+      - name: Verify checksums and publish the completed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.windows.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum --check --strict "SHA256SUMS-$VERSION.txt"
+          # A rerun may replace an incomplete draft, never a published release.
+          tags=$(gh release list --limit 1000 --json tagName --jq '.[].tagName')
+          if grep -Fxq "$GITHUB_REF_NAME" <<< "$tags"; then
+            draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)
+            if [ "$draft" != true ]; then
+              echo 'This version is already published; create a new version to change its assets.' >&2
+              exit 1
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag \
+              --title "pingscreen $GITHUB_REF_NAME" --generate-notes --draft
+          fi
+          gh release upload "$GITHUB_REF_NAME" \
+            "pingscreen-Setup-$VERSION.exe" \
+            "pingscreen-Setup-$VERSION.exe.blockmap" \
+            "SHA256SUMS-$VERSION.txt" --clobber
+          gh release edit "$GITHUB_REF_NAME" --draft=false

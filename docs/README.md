@@ -4,6 +4,7 @@
 
 - [版本变化](changelog.md)
 - [Git 与发布流程](versioning.md)
+- [GitHub 入库隐私检查](security-review.md)
 - [0.1.5 正式版验证记录](verification/0.1.5.md)
 - [屏幕聚焦开发计划](plans/2026-10-14-screen-focus.md)
 - [设置与快捷操作开发计划](plans/2026-10-14-settings-and-shortcuts.md)
@@ -23,5 +24,6 @@
 - `plans/` 按日期和主题保存计划，使用待办清单跟踪进度。
 - `verification/` 按版本保存结果，区分已验证、待验证和已知限制。
 - `media/` 保存 README 使用的演示图片。
+- `design/brand/` 保留构建新 Logo 必需的源图；旧设计导出、草稿 Logo 与 Demo 归档仅在本地保留。
 
 安装和使用说明见 [项目 README](../README.md)。
