@@ -23,9 +23,10 @@ import refresh from './assets/icons/refresh.svg';
 import info from './assets/icons/info.svg';
 import move from './assets/icons/move.svg';
 import link from './assets/icons/link.svg';
-import logo from './assets/icons/logo.svg';
-const icons = { explain, translate, rewrite, custom, region, cursor, model, settings, power, keyboard, mouse, scroll, shield, check, close, chevron, copy, send, stop, eye, refresh, info, move, link, logo };
-export type IconName = keyof typeof icons;
+import logo from './assets/brand/logo.png';
+const icons = { explain, translate, rewrite, custom, region, cursor, model, settings, power, keyboard, mouse, scroll, shield, check, close, chevron, copy, send, stop, eye, refresh, info, move, link };
+export type IconName = keyof typeof icons | 'logo';
 export function Icon({ name, size = 20, className = '' }: { name: IconName; size?: number; className?: string }): React.JSX.Element {
+  if (name === 'logo') return <img aria-hidden="true" alt="" className={`product-logo ${className}`} src={logo} width={size} height={size} />;
   return <span aria-hidden="true" className={`icon ${className}`} style={{ width: size, height: size, maskImage: `url("${icons[name]}")` }} />;
 }

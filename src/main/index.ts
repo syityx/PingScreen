@@ -261,7 +261,7 @@ function start(): void {
   }
   app.on('second-instance', () => void openSettings());
   app.on('window-all-closed', () => { /* Keep the tray app alive. */ });
-  const tray = new Tray(nativeImage.createFromPath(join(app.getAppPath(), 'build/icon.png')));
+  const tray = new Tray(nativeImage.createFromPath(join(app.getAppPath(), 'build/tray.png')));
   tray.setToolTip('pingscreen · Alt + 左键拖动');
   tray.on('click', () => void openSettings());
   function refreshTray(): void {

@@ -131,6 +131,12 @@ h1,h2,h3,p {
   font-weight:600;
 }
 
+.product-logo {
+  display:block;
+  object-fit:contain;
+  flex-shrink:0;
+}
+
 .brand p {
   color:var(--secondary);
   font-size:11px;
@@ -667,6 +673,10 @@ body[data-role=settings] {
 
 .settings-loading>.icon {
   color:var(--accent);
+}
+
+.loading-logo {
+  margin:0 auto;
 }
 
 .settings-loading h1 {

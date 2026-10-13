@@ -43,8 +43,8 @@ export async function runSmoke(h: Harness): Promise<void> {
     if (title !== '设置') throw new Error('Settings failed to render');
     await snapshot(settings, join(dir,'settings.png')); results.push('Settings renderer and sandboxed preload');
     const checkLayout = async (win: BrowserWindow, label: string) => {
-      const layout = await win.webContents.executeJavaScript(`({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,contentFits:!document.querySelector('.settings-content')||document.querySelector('.settings-content').scrollWidth<=document.querySelector('.settings-content').clientWidth,icons:[...document.querySelectorAll('.icon')].every(el=>getComputedStyle(el).maskImage!=='none'&&el.getBoundingClientRect().width>0),background:getComputedStyle(document.querySelector('.settings-content')||document.querySelector('.card-shell')).backgroundColor})`);
-      if (layout.scrollWidth > layout.width || !layout.icons || !layout.contentFits) throw new Error('UI overflow / missing assets in '+label+': '+JSON.stringify(layout));
+      const layout = await win.webContents.executeJavaScript(`({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,contentFits:!document.querySelector('.settings-content')||document.querySelector('.settings-content').scrollWidth<=document.querySelector('.settings-content').clientWidth,icons:[...document.querySelectorAll('.icon')].every(el=>getComputedStyle(el).maskImage!=='none'&&el.getBoundingClientRect().width>0),logos:[...document.querySelectorAll('.product-logo')].every(el=>el.complete&&el.naturalWidth>0&&getComputedStyle(el).objectFit==='contain'),background:getComputedStyle(document.querySelector('.settings-content')||document.querySelector('.card-shell')).backgroundColor})`);
+      if (layout.scrollWidth > layout.width || !layout.icons || !layout.logos || !layout.contentFits) throw new Error('UI overflow / missing assets in '+label+': '+JSON.stringify(layout));
     };
     if(settings.isMenuBarVisible()) throw new Error('Native menu bar is still visible');
     const navigateSettings = async (tab: string) => {

@@ -79,7 +79,7 @@ export function Settings(): React.JSX.Element {
     const target = root.scrollTop + section.getBoundingClientRect().top - root.getBoundingClientRect().top;
     root.scrollTo({ top: Math.min(target, root.scrollHeight - root.clientHeight), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
   };
-  if (!settings) return <div className="settings-loading"><Icon name="logo" size={32} /><h1>pingscreen</h1><p role="status">{message || '正在读取设置…'}</p></div>;
+  if (!settings) return <div className="settings-loading"><Icon name="logo" size={48} className="loading-logo" /><h1>pingscreen</h1><p role="status">{message || '正在读取设置…'}</p></div>;
   const update = (patch: Partial<PublicSettings>) => setSettings(previous => previous ? { ...previous, ...patch } : previous);
   const autoSave = (patch: Partial<ImmediateSettings>) => {
     update(patch); setAutoMessage('正在自动保存…'); setAutoFailed(false);
@@ -127,7 +127,7 @@ export function Settings(): React.JSX.Element {
   const autoFeedback = <p className={`autosave-message ${autoFailed ? 'warning' : ''}`} role="status"><Icon name={autoFailed ? 'info' : 'check'} size={14} />{autoMessage}</p>;
   return <main className="settings-shell">
     <aside className="settings-sidebar">
-      <div className="brand"><span className="brand-mark"><Icon name="logo" size={28} /></span><div><span>pingscreen</span><p>指向，选择，理解。</p></div></div>
+      <div className="brand"><span className="brand-mark"><Icon name="logo" size={36} /></span><div><span>pingscreen</span><p>指向，选择，理解。</p></div></div>
       <nav aria-label="设置分类">{tabs.map(item => <button key={item.id} data-tab={item.id} className={`nav-item ${tab === item.id ? 'active' : ''}`} aria-controls={`settings-${item.id}`} aria-current={tab === item.id ? 'location' : undefined} onClick={() => navigate(item.id)}><Icon name={item.icon} size={22} /><span>{item.label}</span></button>)}</nav>
       <div className="sidebar-help"><p>{gesture}</p><p>Ctrl + Alt + P 暂停 / 恢复</p><p>v{version} · Windows{demo ? ' · UI Demo' : ''}</p></div>
     </aside>

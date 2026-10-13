@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="build/icon.png" width="72" alt="pingscreen 图标" />
+  <img src="src/renderer/assets/brand/logo.png" width="120" alt="pingscreen Logo" />
   <h1>pingscreen</h1>
   <p><strong>把问题，放在屏幕上。</strong></p>
   <p>按住 <strong>Alt + 鼠标左键</strong>，拖向一个意图，松开即可。<br />在任何桌面内容上，解释、翻译、改写，或问一个具体问题。</p>
@@ -22,6 +22,8 @@
 面向 **Windows x64**，目前主要在 Windows 11 上验证。
 
 **当前正式版 0.1.5：** 已整合 0.1.4 Demo 的完整界面与设置交互，安装包位于 `release/pingscreen-Setup-0.1.5.exe`。
+
+源码已采用新产品 Logo；已发布的 0.1.5 安装包保持原样，新 Logo 将在下次发布中提供。
 
 1. 运行 `pingscreen-Setup-0.1.5.exe` 完成安装。
 2. 打开应用，填写服务地址、模型名称和 API Key。模型需支持 **图片输入的 Chat Completions 兼容接口**；不要求鉴权的本地服务可留空密钥。
@@ -97,6 +99,7 @@ npm run dev
 | 命令 | 作用 |
 | --- | --- |
 | `npm run typecheck` | 类型检查 |
+| `npm run build:brand` | 从已确认的产品 Logo 生成界面、应用、托盘与 Windows 图标 |
 | `npm test` | 应用自动测试 |
 | `npm run test:helper` | 原生输入与 HDR 颜色测试 |
 | `npm run smoke` | 使用生成画面和模拟模型验证完整流程 |

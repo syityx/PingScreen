@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "build:brand": "node scripts/build-brand.cjs",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -44,6 +45,7 @@
       "out/**/*",
       "package.json",
       "build/icon.png",
+      "build/tray.png",
       "LICENSE",
       "THIRD_PARTY_LICENSES.txt"
     ],
@@ -85,6 +87,7 @@
     "electron": "^44.7.0",
     "electron-builder": "^26.5.0",
     "electron-vite": "^5.0.0",
+    "sharp": "^0.35.5",
     "typescript": "5.9",
     "vite": "^7.3.6",
     "vitest": "^5.0.4"

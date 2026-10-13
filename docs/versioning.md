@@ -1,6 +1,6 @@
 # Git 与发布流程
 
-项目仓库位于 `D:\Code\pingscreen`。当前开发分支为 `codex/release-0.1.5`，尚未配置远程仓库。
+项目仓库位于 `D:\Code\pingscreen`。正式版发布分支为 `codex/release-0.1.5`，Logo 更新在 `codex/product-logo` 分支，尚未配置远程仓库。
 
 ## 版本基线
 
