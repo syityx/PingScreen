@@ -18,15 +18,11 @@
     "build:helper": "node native/hook-helper/run.mjs build",
     "test:helper": "node native/hook-helper/run.mjs test",
     "dist": "npm run build:helper && npm run build && electron-builder --win --publish never",
-    "demo": "npm run build:helper && npm run build && electron-builder --config electron-builder.demo.cjs --win --publish never",
     "verify:release": "node scripts/verify-release.cjs"
   },
   "build": {
     "appId": "com.pingscreen.app",
     "productName": "pingscreen",
-    "extraMetadata": {
-      "demo": false
-    },
     "extraFiles": [
       {
         "from": "docs/release-readme.txt",

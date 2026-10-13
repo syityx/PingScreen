@@ -22,7 +22,6 @@ function Note({ title, children }: { title: string; children: React.ReactNode })
 }
 export function Settings(): React.JSX.Element {
   const [settings, setSettings] = useState<PublicSettings | null>(null);
-  const [demo, setDemo] = useState(false);
   const [status, setStatus] = useState<Status>({ helper: 'starting', enabled: true });
   const [tab, setTab] = useState('model');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -36,7 +35,7 @@ export function Settings(): React.JSX.Element {
   const [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [failed, setFailed] = useState(false);
   useEffect(() => {
     const unsubscribe = api.onEvent(event => { if (event.type === 'status') setStatus(event.state); });
-    void api.init().then(data => { setSettings(data.settings); setDemo(data.demo === true); if (data.status) setStatus(data.status); }).catch(error => { setMessage(errorText(error)); setFailed(true); });
+    void api.init().then(data => { setSettings(data.settings); if (data.status) setStatus(data.status); }).catch(error => { setMessage(errorText(error)); setFailed(true); });
     return unsubscribe;
   }, []);
   const loaded = settings !== null;
@@ -129,7 +128,7 @@ export function Settings(): React.JSX.Element {
     <aside className="settings-sidebar">
       <div className="brand"><span className="brand-mark"><Icon name="logo" size={36} /></span><div><span>pingscreen</span><p>指向，选择，理解。</p></div></div>
       <nav aria-label="设置分类">{tabs.map(item => <button key={item.id} data-tab={item.id} className={`nav-item ${tab === item.id ? 'active' : ''}`} aria-controls={`settings-${item.id}`} aria-current={tab === item.id ? 'location' : undefined} onClick={() => navigate(item.id)}><Icon name={item.icon} size={22} /><span>{item.label}</span></button>)}</nav>
-      <div className="sidebar-help"><p>{gesture}</p><p>Ctrl + Alt + P 暂停 / 恢复</p><p>v{version} · Windows{demo ? ' · UI Demo' : ''}</p></div>
+      <div className="sidebar-help"><p>{gesture}</p><p>Ctrl + Alt + P 暂停 / 恢复</p><p>v{version} · Windows</p></div>
     </aside>
     <div className="settings-content" ref={scrollRef} tabIndex={0} aria-label="配置页，向下滚动查看更多设置">
       <section className="settings-page" id="settings-model" data-section="model" aria-label="模型连接">
@@ -163,7 +162,7 @@ export function Settings(): React.JSX.Element {
       <section className="settings-page" id="settings-app" data-section="app" aria-label="应用">
           <header className="settings-heading"><h2>应用</h2><p>常驻桌面，随时理解屏幕上的内容。</p></header>
           <section className="settings-row"><Icon name="power" size={24} /><div><h3>开机启动</h3><p>启动后常驻系统托盘</p></div><Toggle checked={settings.launchAtStartup} onChange={launchAtStartup => autoSave({ launchAtStartup })} label="开机启动" /></section>
-          <section className="settings-panel about-panel"><h3>pingscreen {version}</h3><p>Windows 桌面 AI 助手{demo ? ' · UI Demo' : ''}</p></section>
+          <section className="settings-panel about-panel"><h3>pingscreen {version}</h3><p>Windows 桌面 AI 助手</p></section>
           <section className="settings-panel security-panel"><Icon name="shield" size={22} /><div><h3>API Key 使用 Windows 系统加密</h3><p>模型服务会按照其自身政策处理请求。</p><p>只发送目标所在显示器；框选仍保留整屏上下文。</p></div></section>
           {autoFeedback}
           <footer className="copyright"><p>© 2026 pingscreen contributors · MIT 协议</p><p><a href="https://github.com/darrenprx/lolPing" onClick={event => { event.preventDefault(); void api.command({ type: 'openLolPing' }).catch(error => { setAutoMessage(errorText(error)); setAutoFailed(true); }); }}>基于 lolPing 开源项目</a> · Copyright © 2026 Danrui Meng</p></footer>

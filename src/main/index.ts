@@ -10,25 +10,20 @@ import { pickGestureAction, toPixels, wheelCenter } from '../shared/geometry';
 import { annotateBitmap } from './annotation';
 import { askModel, initialQuestion, messagesFor } from './model';
 import { SessionGate } from './sessionGate';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { runSmoke } from './smoke';
 import { CaptureClient } from './capture';
 import { focusRect } from './focus';
 import { scrollTranslation } from '../shared/translation';
 
 const SMOKE = !app.isPackaged && process.argv.includes('--smoke');
-const DEMO = app.isPackaged && JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).demo === true;
-if (DEMO) {
-  const demoData = join(app.getPath('appData'), 'pingscreen-demo');
-  mkdirSync(demoData, { recursive: true }); app.setPath('userData', demoData);
-}
 if (SMOKE) { const dir = join(app.getAppPath(), '.tools/smoke/userdata'); mkdirSync(dir, { recursive: true }); app.setPath('userData', dir); }
 
-app.setName(DEMO ? 'pingscreen-demo' : 'pingscreen');
+app.setName('pingscreen');
 nativeTheme.themeSource = 'light';
 // The capture worker outputs SDR sRGB, including tone-mapped HDR frames.
 app.commandLine.appendSwitch('force-color-profile', 'srgb');
-app.setAppUserModelId(DEMO ? 'com.pingscreen.demo' : 'com.pingscreen.app');
+app.setAppUserModelId('com.pingscreen.app');
 if (!app.requestSingleInstanceLock()) app.quit();
 else void app.whenReady().then(start).catch(error => { dialog.showErrorBox('pingscreen 启动失败', String(error)); app.quit(); });
 
@@ -42,7 +37,7 @@ interface Session {
 
 function start(): void {
   if (process.platform !== 'win32') { dialog.showErrorBox('pingscreen', '首版仅支持 Windows。'); app.quit(); return; }
-  const store = new SettingsStore(SMOKE ? join(app.getAppPath(), '.tools/smoke/config') : join(app.getPath('appData'), DEMO ? 'pingscreen-demo' : 'pingscreen'), safeStorage);
+  const store = new SettingsStore(SMOKE ? join(app.getAppPath(), '.tools/smoke/config') : join(app.getPath('appData'), 'pingscreen'), safeStorage);
   const helperPath = app.isPackaged ? join(process.resourcesPath, 'hook-helper.exe') : join(app.getAppPath(), 'native/hook-helper/build/hook-helper.exe');
   const bridge = new InputBridge({ command: helperPath, args: SMOKE ? ['--simulate'] : [] });
   const captureClient = new CaptureClient(app.isPackaged ? join(process.resourcesPath, 'capture-helper.exe') : join(app.getAppPath(), 'native/hook-helper/build/capture-helper.exe'));
@@ -61,7 +56,7 @@ function start(): void {
       show: false, frame: role === 'settings', transparent: role !== 'settings', backgroundColor: role === 'settings' ? '#f7f8fa' : '#00000000',
       resizable: role === 'settings', movable: role !== 'stage', minimizable: role === 'settings', maximizable: role === 'settings',
       focusable: role !== 'stage', skipTaskbar: role !== 'settings', alwaysOnTop: role !== 'settings', hasShadow: role !== 'stage', fullscreenable: false,
-      title: DEMO ? 'pingscreen · UI Demo' : 'pingscreen', icon: join(app.getAppPath(), 'build/icon.png'),
+      title: 'pingscreen', icon: join(app.getAppPath(), 'build/icon.png'),
       webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: SMOKE ? false : role !== 'stage', spellcheck: false, webSecurity: true, offscreen: SMOKE },
     });
     win.setMenu(null);
@@ -279,7 +274,7 @@ function start(): void {
     return !!session && sender === stages.get(session.display.id)?.webContents;
   }
   ipcMain.handle('pingscreen:init', event => {
-    if (authorized(event.sender, 'settings')) return { role: 'settings', demo: DEMO, settings: store.public(), status: { helper: bridge.status, enabled } };
+    if (authorized(event.sender, 'settings')) return { role: 'settings', settings: store.public(), status: { helper: bridge.status, enabled } };
     if (authorized(event.sender, 'card')) return { role: 'card', card: session?.card ?? null };
     if ([...stages.values()].some(win => win.webContents === event.sender)) return { role: 'stage', stage: session?.stage ?? null };
     throw new Error('未知窗口。');
@@ -289,7 +284,7 @@ function start(): void {
     if (raw === undefined) return store.public();
     const result = store.save(raw);
     closeSession(); bridge.send(configCommand(store.get(), enabled)); syncSuspension();
-    if (!SMOKE && Object.hasOwn(raw, 'launchAtStartup')) app.setLoginItemSettings({ name: DEMO ? 'pingscreen-demo' : 'pingscreen', openAtLogin: result.launchAtStartup, args: ['--hidden'] }); return result;
+    if (!SMOKE && Object.hasOwn(raw, 'launchAtStartup')) app.setLoginItemSettings({ name: 'pingscreen', openAtLogin: result.launchAtStartup, args: ['--hidden'] }); return result;
   });
   ipcMain.handle('pingscreen:test', async (event, raw: unknown) => {
     if (!authorized(event.sender, 'settings')) throw new Error('无权测试连接。');

@@ -12,7 +12,7 @@ const archive = path.join(unpacked, 'resources', 'app.asar');
 const read = name => asar.extractFile(archive, name);
 const metadata = JSON.parse(read('package.json').toString('utf8'));
 assert.equal(metadata.version, pkg.version);
-assert.equal(metadata.demo, false, 'Release must use the formal identity');
+assert.equal(Object.hasOwn(metadata, 'demo'), false, 'Legacy build metadata must not be shipped');
 assert.equal(pkg.build.appId, 'com.pingscreen.app');
 for (const relative of ['out/main/index.js', 'out/preload/index.js', 'out/renderer/index.html', 'LICENSE', 'THIRD_PARTY_LICENSES.txt']) {
   const name = path.join(...relative.split('/'));

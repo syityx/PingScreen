@@ -105,7 +105,6 @@ npm run dev
 | `npm run smoke` | 使用生成画面和模拟模型验证完整流程 |
 | `npm run dist` | 生成 Windows x64 安装包，输出至 `release/` |
 | `npm run verify:release` | 检查正式版归档、原生助手和安装包完整性，并生成 SHA-256 校验文件 |
-| `npm run demo` | 单独构建隔离配置的 Demo ZIP |
 
 当前正式版检查见 [0.1.5 验证记录](docs/verification/0.1.5.md)，此前性能记录见 [0.1.2 验证记录](docs/verification/0.1.2.md)。
 
