@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { PublicSettings, Status } from '../shared/types';
+import { ANSWER_FONT_SIZE, type PublicSettings, type Status } from '../shared/types';
 import { Icon, type IconName } from './Icons';
 import wheelFive from './assets/wheels/wheel-5-idle.svg';
 import wheelFour from './assets/wheels/wheel-4-idle.svg';
 import { version } from '../../package.json';
 
 const api = window.pingscreen;
-type ImmediateSettings = Pick<PublicSettings, 'trigger' | 'dragThresholdPx' | 'wheelSlots' | 'launchAtStartup'>;
+type ImmediateSettings = Pick<PublicSettings, 'trigger' | 'dragThresholdPx' | 'wheelSlots' | 'launchAtStartup' | 'answerFontSize'>;
 const tabs: { id: string; label: string; icon: IconName }[] = [
   { id: 'model', label: '模型连接', icon: 'model' },
   { id: 'gesture', label: '手势', icon: 'cursor' },
@@ -162,6 +162,7 @@ export function Settings(): React.JSX.Element {
       <section className="settings-page" id="settings-app" data-section="app" aria-label="应用">
           <header className="settings-heading"><h2>应用</h2><p>常驻桌面，随时理解屏幕上的内容。</p></header>
           <section className="settings-row"><Icon name="power" size={24} /><div><h3>开机启动</h3><p>启动后常驻系统托盘</p></div><Toggle checked={settings.launchAtStartup} onChange={launchAtStartup => autoSave({ launchAtStartup })} label="开机启动" /></section>
+          <section className="settings-row reading-row"><Icon name="explain" size={24} /><div><h3>回答字号</h3><p>调整回答的文字大小，下次回答生效</p></div><div className="slider-control"><input id="answer-font-size" aria-label="回答字号" type="range" min={ANSWER_FONT_SIZE.min} max={ANSWER_FONT_SIZE.max} step={ANSWER_FONT_SIZE.step} value={settings.answerFontSize} onChange={event => autoSave({ answerFontSize: Number(event.target.value) })} /><output htmlFor="answer-font-size">{settings.answerFontSize} px</output></div></section>
           <section className="settings-panel about-panel"><h3>pingscreen {version}</h3><p>Windows 桌面 AI 助手</p></section>
           <section className="settings-panel security-panel"><Icon name="shield" size={22} /><div><h3>API Key 使用 Windows 系统加密</h3><p>模型服务会按照其自身政策处理请求。</p><p>只发送目标所在显示器；框选仍保留整屏上下文。</p></div></section>
           {autoFeedback}

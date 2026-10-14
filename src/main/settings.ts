@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { PublicSettings, Settings } from '../shared/types';
-export const DEFAULTS: Settings = { baseUrl: '', model: '', trigger: 'alt', wheelSlots: 5, dragThresholdPx: 8, launchAtStartup: false, stream: true };
+import { ANSWER_FONT_SIZE, type PublicSettings, type Settings } from '../shared/types';
+export const DEFAULTS: Settings = { baseUrl: '', model: '', trigger: 'alt', wheelSlots: 5, dragThresholdPx: 8, launchAtStartup: false, stream: true, answerFontSize: ANSWER_FONT_SIZE.default };
 export function endpoint(base: string): string {
   const u = new URL(base.trim());
   if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.search || u.hash) throw new Error('模型地址需要是 HTTP/HTTPS 地址，且不包含用户名、密码或查询参数。');
@@ -10,7 +10,7 @@ export function endpoint(base: string): string {
 }
 export function normalize(raw: unknown): Settings {
   const s = raw && typeof raw === 'object' ? raw as Partial<Settings> : {};
-  return { baseUrl: typeof s.baseUrl === 'string' ? s.baseUrl.trim().slice(0, 2048) : '', model: typeof s.model === 'string' ? s.model.trim().slice(0, 200) : '', trigger: ['alt','ctrl','shift','mouse4','mouse5'].includes(s.trigger ?? '') ? s.trigger! : 'alt', wheelSlots: s.wheelSlots === 4 ? 4 : 5, dragThresholdPx: typeof s.dragThresholdPx === 'number' && Number.isFinite(s.dragThresholdPx) ? Math.round(Math.max(3, Math.min(40, s.dragThresholdPx))) : 8, launchAtStartup: s.launchAtStartup === true, stream: s.stream !== false };
+  return { baseUrl: typeof s.baseUrl === 'string' ? s.baseUrl.trim().slice(0, 2048) : '', model: typeof s.model === 'string' ? s.model.trim().slice(0, 200) : '', trigger: ['alt','ctrl','shift','mouse4','mouse5'].includes(s.trigger ?? '') ? s.trigger! : 'alt', wheelSlots: s.wheelSlots === 4 ? 4 : 5, dragThresholdPx: typeof s.dragThresholdPx === 'number' && Number.isFinite(s.dragThresholdPx) ? Math.round(Math.max(3, Math.min(40, s.dragThresholdPx))) : 8, launchAtStartup: s.launchAtStartup === true, stream: s.stream !== false, answerFontSize: typeof s.answerFontSize === 'number' && Number.isFinite(s.answerFontSize) ? Math.round(Math.max(ANSWER_FONT_SIZE.min, Math.min(ANSWER_FONT_SIZE.max, s.answerFontSize))) : ANSWER_FONT_SIZE.default };
 }
 export interface SecretStorage { isEncryptionAvailable(): boolean; encryptString(value: string): Buffer; decryptString(value: Buffer): string }
 export class SettingsStore {
