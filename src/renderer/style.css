@@ -455,12 +455,17 @@ body[data-role=settings] {
   color:var(--secondary);
 }
 
-.field input {
+.field input,.field select {
   display:block;
   margin-top:7px;
   font-size:12px;
   height:40px;
 }
+
+.field select { width:100%; }
+.field-row.provider-fields { margin-top:0; }
+.provider-url { margin-top:16px; }
+.provider-note { margin:10px 0 0; font-size:11px; color:var(--secondary); line-height:1.6; }
 
 .field-row {
   display:flex;

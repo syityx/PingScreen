@@ -8,6 +8,7 @@ import type { CardState, Point, StageState, TranslationMode } from '../shared/ty
 import type { SettingsStore } from './settings';
 import { version } from '../../package.json';
 import { runCardLayoutSmoke } from './smokeCardLayout';
+import { runProviderSmoke } from './smokeProviders';
 interface SmokeSession { id: string; card?: CardState; stage?: StageState; origin: Point; wheelCenter: Point; release?: Point; translationMode: TranslationMode; display: Display; request?: AbortController }
 export interface Harness { handle(event: HelperEvent): void; getSession(): SmokeSession | undefined; getSettings(): BrowserWindow | undefined; getCard(): BrowserWindow | undefined; getStage(): BrowserWindow | undefined; store: SettingsStore; closeSession(): void }
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -108,7 +109,7 @@ export async function runSmoke(h: Harness): Promise<void> {
     await until(()=>h.store.get().answerFontSize===18,'rapid font preference saves');
     if(await settings.webContents.executeJavaScript(`document.querySelector('#answer-font-size+output').textContent`)!=='18 px') throw new Error('Font output missing');
     const persisted = JSON.parse(readFileSync(join(app.getAppPath(),'.tools/smoke/config/settings.json'),'utf8'));
-    if(persisted.answerFontSize!==18 || persisted.model!=='smoke-vision' || persisted.baseUrl!==`http://127.0.0.1:${address.port}/v1`) throw new Error('Font persistence changed model settings');
+    if(persisted.answerFontSize!==18 || persisted.profiles.custom.model!=='smoke-vision' || persisted.profiles.custom.baseUrl!==`http://127.0.0.1:${address.port}/v1`) throw new Error('Font persistence changed model settings');
     if(await settings.webContents.executeJavaScript(`document.querySelector('input[type=url]').value`)!=='not-a-valid-url') throw new Error('Font auto-save replaced model draft');
     const saveBeforeFontFailure=h.store.save.bind(h.store);
     try {
@@ -150,6 +151,9 @@ export async function runSmoke(h: Harness): Promise<void> {
     await settings.webContents.executeJavaScript(`document.querySelector('.settings-buttons button:last-child').click()`);
     await until(()=>h.store.get().model==='smoke-vision','restore model');await delay(80);packets.length=0;
     results.push('Immediate non-model saves with rapid edits; failure rollback; invalid model drafts isolated; exactly test/save buttons; draft model/key test does not save; explicit model save');
+    await navigateSettings('model');
+    await runProviderSmoke(settings, h.store, `http://127.0.0.1:${address.port}/v1`, packets);
+    results.push('Provider dropdowns, keyboard selection, DeepSeek-Flash, custom local synthetic-image request, per-provider drafts and secrets, explicit save/reload/clear and narrow layout; cloud network simulated');
     await settings.webContents.executeJavaScript(`(()=>{const root=document.querySelector('.settings-content');root.dispatchEvent(new WheelEvent('wheel'));root.scrollTo({top:document.querySelector('[data-section=gesture]').offsetTop,behavior:'instant'});})()`);await delay(120);
     if(await settings.webContents.executeJavaScript(`document.querySelector('.nav-item.active').dataset.tab`)!=='gesture') throw new Error('Scrolling did not update sidebar');
     // Wheel input near a section boundary should settle on its native CSS snap point.

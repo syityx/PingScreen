@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { InputBridge } from './inputBridge';
 import { physicalToLocal, type DisplayMap } from './coords';
-import { normalize, SettingsStore } from './settings';
+import { SettingsStore } from './settings';
 import { configCommand, type HelperEvent } from '../shared/protocol';
 import { isIntent, validRect, type CardState, type Intent, type Point, type StageState, type Target, type TranslationMode, type Turn, type UiEvent } from '../shared/types';
 import { answerCardBounds, answerCardSize, pickGestureAction, toPixels, wheelCenter } from '../shared/geometry';
@@ -309,9 +309,7 @@ function start(): void {
     if (raw !== undefined && (!raw || typeof raw !== 'object' || Array.isArray(raw))) throw new Error('测试配置格式无效。');
     const draft = (raw ?? {}) as Record<string, unknown>;
     if (draft.apiKey !== undefined && (typeof draft.apiKey !== 'string' || draft.apiKey.length > 8192)) throw new Error('测试密钥格式无效。');
-    const config = normalize({ ...store.get(), ...draft });
-    if (!config.baseUrl || !config.model) throw new Error('请填写服务地址和模型名称。');
-    const key = typeof draft.apiKey === 'string' && draft.apiKey.trim() ? draft.apiKey.trim() : draft.clearKey === true ? '' : store.key();
+    const { config, key } = store.testConnection(draft);
     testing = true;
     const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 30_000);
     try {

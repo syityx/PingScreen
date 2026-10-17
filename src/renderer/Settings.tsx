@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ANSWER_FONT_SIZE, type PublicSettings, type Status } from '../shared/types';
+import { PROVIDERS, providerFor, type ProviderId, type ConnectionProfile } from '../shared/providers';
 import { Icon, type IconName } from './Icons';
 import wheelFive from './assets/wheels/wheel-5-idle.svg';
 import wheelFour from './assets/wheels/wheel-4-idle.svg';
@@ -32,10 +33,13 @@ export function Settings(): React.JSX.Element {
     const next = writes.current.then(write); writes.current = next.catch(() => undefined); return next;
   };
   const [key, setKey] = useState(''), [clearKey, setClearKey] = useState(false);
+  const [provider, setProvider] = useState<ProviderId>('custom');
+  const [drafts, setDrafts] = useState<Partial<Record<ProviderId, ConnectionProfile>>>({});
+  const [otherModels, setOtherModels] = useState<Partial<Record<ProviderId, boolean>>>({});
   const [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [failed, setFailed] = useState(false);
   useEffect(() => {
     const unsubscribe = api.onEvent(event => { if (event.type === 'status') setStatus(event.state); });
-    void api.init().then(data => { setSettings(data.settings); if (data.status) setStatus(data.status); }).catch(error => { setMessage(errorText(error)); setFailed(true); });
+    void api.init().then(data => { setSettings(data.settings); setProvider(data.settings.provider); if (data.status) setStatus(data.status); }).catch(error => { setMessage(errorText(error)); setFailed(true); });
     return unsubscribe;
   }, []);
   const loaded = settings !== null;
@@ -80,6 +84,18 @@ export function Settings(): React.JSX.Element {
   };
   if (!settings) return <div className="settings-loading"><Icon name="logo" size={48} className="loading-logo" /><h1>pingscreen</h1><p role="status">{message || '正在读取设置…'}</p></div>;
   const update = (patch: Partial<PublicSettings>) => setSettings(previous => previous ? { ...previous, ...patch } : previous);
+  const preset = providerFor(provider);
+  const saved = settings.profiles[provider];
+  const connection = drafts[provider] ?? saved;
+  const otherModel = otherModels[provider] ?? !preset.models.some(model => model.id === connection.model);
+  const updateConnection = (patch: Partial<ConnectionProfile>) => {
+    setDrafts(previous => ({ ...previous, [provider]: { ...connection, ...patch } }));
+    setMessage(''); setFailed(false);
+  };
+  const changeProvider = (next: ProviderId) => {
+    setMessage(key.trim() || clearKey ? '刚才的密钥修改尚未保存，切换后已清空；其他连接草稿仍保留。' : '');
+    setFailed(false); setKey(''); setClearKey(false); setProvider(next);
+  };
   const autoSave = (patch: Partial<ImmediateSettings>) => {
     update(patch); setAutoMessage('正在自动保存…'); setAutoFailed(false);
     void enqueue(() => api.settings(patch)).then(() => { setAutoMessage('已自动保存'); }).catch(async error => {
@@ -104,8 +120,9 @@ export function Settings(): React.JSX.Element {
   const save = async () => {
     setBusy(true); setMessage(''); setFailed(false);
     try {
-      const next = await enqueue(() => api.settings({ baseUrl: settings.baseUrl, model: settings.model, stream: settings.stream, apiKey: key, clearKey }));
-      update({ baseUrl: next.baseUrl, model: next.model, stream: next.stream, hasKey: next.hasKey, secureStorage: next.secureStorage, keyProblem: next.keyProblem }); setKey(''); setClearKey(false);
+      const next = await enqueue(() => api.settings({ provider, ...connection, apiKey: key, clearKey }));
+      update({ provider: next.provider, profiles: next.profiles, baseUrl: next.baseUrl, model: next.model, stream: next.stream, hasKey: next.hasKey, secureStorage: next.secureStorage, keyProblem: next.keyProblem });
+      setDrafts(previous => ({ ...previous, [provider]: next.profiles[provider] })); setKey(''); setClearKey(false);
       setMessage('模型配置已保存。');
     } catch (error) { setMessage(errorText(error)); setFailed(true); }
     finally { setBusy(false); }
@@ -113,7 +130,7 @@ export function Settings(): React.JSX.Element {
   const test = async () => {
     setBusy(true); setMessage(''); setFailed(false);
     try {
-      const result = await api.test({ baseUrl: settings.baseUrl, model: settings.model, stream: settings.stream, apiKey: key, clearKey });
+      const result = await api.test({ provider, ...connection, apiKey: key, clearKey });
       setMessage(`${result.message} 本次测试未保存配置。`);
     } catch (error) { setMessage(errorText(error)); setFailed(true); }
     finally { setBusy(false); }
@@ -136,11 +153,19 @@ export function Settings(): React.JSX.Element {
       <section className="runtime-status"><span className={`status-dot ${ready ? 'online' : ''}`} /><div><h2>{statusTitle}</h2><p>{status.helper === 'failed' ? '请重启应用后重试' : !status.enabled ? '恢复后即可在任意应用中标点' : `按住${gesture}，拖向意图后松开提交`}</p></div><span className="status-action-label">{status.enabled ? '开启' : '关闭'}</span><Toggle checked={status.enabled} onChange={value => void enable(value)} label="启用屏幕手势" disabled={status.helper !== 'running'} /></section>
         <h2 className="page-section-title">模型连接</h2>
           <section className="settings-panel model-panel"><div className="panel-heading"><h3>连接你的多模态模型</h3><p>支持图片输入的 Chat Completions 兼容接口</p></div>
-            <label className="field">服务地址<input type="url" disabled={busy} value={settings.baseUrl} placeholder="https://your-provider.example/v1" onChange={event => update({ baseUrl: event.target.value })} /></label>
-            <div className="field-row"><label className="field">模型名称<input disabled={busy} value={settings.model} placeholder="填写支持图片输入的模型名称" onChange={event => update({ model: event.target.value })} /></label><label className="field">API Key<input type="password" disabled={busy} autoComplete="off" value={key} placeholder={clearKey ? '保存后清除现有密钥' : settings.hasKey ? '留空保留现有密钥' : '填写服务密钥'} onChange={event => { setKey(event.target.value); setClearKey(false); }} /><span className="field-note">{settings.hasKey && !clearKey ? '已安全保存 · 本地服务可留空' : '本地服务可留空'}</span></label></div>
-            <div className="connection-options"><div className="toggle-label"><Toggle disabled={busy} checked={settings.stream} onChange={stream => update({ stream })} label="流式显示回答" /><span>流式显示回答</span></div>{settings.hasKey && <button className="text-button" disabled={busy} onClick={() => { setClearKey(!clearKey); setKey(''); }}>{clearKey ? '撤销清除密钥' : '清除已保存密钥'}</button>}</div>
-            {settings.keyProblem && <p className="warning">{settings.keyProblem}</p>}{!settings.secureStorage && <p className="warning">系统密钥存储不可用，无法保存 API Key。</p>}
-            <div className="settings-buttons"><button disabled={busy || !settings.baseUrl || !settings.model} onClick={() => void test()}>测试连接</button><button className="primary" disabled={busy} onClick={() => void save()}>保存</button></div>
+            <div className="field-row provider-fields">
+              <label className="field">服务商<select aria-label="服务商" disabled={busy} value={provider} onChange={event => changeProvider(event.target.value as ProviderId)}>{PROVIDERS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+              {provider !== 'custom' && <label className="field">模型<select aria-label="模型" disabled={busy} value={otherModel ? '__other__' : connection.model} onChange={event => { const other = event.target.value === '__other__'; setOtherModels(previous => ({ ...previous, [provider]: other })); updateConnection({ model: other ? '' : event.target.value }); }}>{preset.models.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}<option value="__other__">{provider === 'doubao' ? '填写图片模型 / 部署 ID' : '其他模型（手动填写）'}</option></select></label>}
+            </div>
+            {preset.note && <p className="provider-note">{preset.note}</p>}
+            {provider === 'custom' && <label className="field provider-url">服务地址<input aria-label="服务地址" type="url" disabled={busy} value={connection.baseUrl} placeholder="https://your-provider.example/v1" onChange={event => updateConnection({ baseUrl: event.target.value })} /></label>}
+            <div className="field-row">
+              {(provider === 'custom' || otherModel) && <label className="field">{provider === 'custom' ? '模型名称' : '模型 / 部署 ID'}<input aria-label="模型名称" disabled={busy} value={connection.model} placeholder="填写支持图片输入的模型名称" onChange={event => updateConnection({ model: event.target.value })} /></label>}
+              <label className="field">API Key<input type="password" disabled={busy} autoComplete="off" value={key} placeholder={clearKey ? '保存后清除现有密钥' : saved.hasKey ? '留空保留现有密钥' : '填写服务密钥'} onChange={event => { setKey(event.target.value); setClearKey(false); setMessage(''); }} /><span className="field-note">{saved.hasKey && !clearKey ? '此服务商已安全保存密钥' : provider === 'custom' ? '本地服务可留空' : '填写此服务商的 API Key'}</span></label>
+            </div>
+            <div className="connection-options"><div className="toggle-label"><Toggle disabled={busy} checked={connection.stream} onChange={stream => updateConnection({ stream })} label="流式显示回答" /><span>流式显示回答</span></div>{saved.hasKey && <button className="text-button" disabled={busy} onClick={() => { setClearKey(!clearKey); setKey(''); setMessage(''); }}>{clearKey ? '撤销清除密钥' : '清除已保存密钥'}</button>}</div>
+            {saved.keyProblem && <p className="warning">{saved.keyProblem}</p>}{settings.keyProblem && settings.keyProblem !== saved.keyProblem && <p className="warning">{settings.keyProblem}</p>}{!settings.secureStorage && <p className="warning">系统密钥存储不可用，无法保存 API Key。</p>}
+            <div className="settings-buttons"><button disabled={busy || !connection.baseUrl || !connection.model.trim()} onClick={() => void test()}>测试连接</button><button className="primary" disabled={busy || !connection.baseUrl || !connection.model.trim()} onClick={() => void save()}>保存</button></div>
           </section>
           <p className="subtle test-note">连接测试使用生成的图片，不上传你的桌面。</p>
           <Note title="只在你发起手势时读取画面">AI 会收到目标显示器的完整截图、定位信息与局部细节图。截图与对话仅保留在当前会话中。</Note>
