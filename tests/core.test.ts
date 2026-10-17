@@ -1,10 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { pickAction, pickGestureAction, rectBetween, toPixels, wheelCenter } from '../src/shared/geometry';
+import { answerCardBounds, answerCardSize, pickAction, pickGestureAction, rectBetween, toPixels, wheelCenter } from '../src/shared/geometry';
 import { parseHelperLine, configCommand } from '../src/shared/protocol';
 import { physicalToLocal } from '../src/main/coords';
 import { DEFAULTS, endpoint, normalize } from '../src/main/settings';
 import { SessionGate } from '../src/main/sessionGate';
 import { annotateBitmap } from '../src/main/annotation';
+
+describe('content sized answer card', () => {
+  it.each([[1920,1032,640,160], [480,800,480,160], [900,120,640,120], [320,200,320,160]])('starts compact in a %s by %s work area', (areaWidth,areaHeight,width,height) => {
+    const size=answerCardSize({width:areaWidth,height:areaHeight});
+    expect(size).toEqual({width,height});
+    expect(size.width).toBeLessThanOrEqual(areaWidth);
+    expect(size.height).toBeLessThanOrEqual(areaHeight);
+    expect(size.height).toBeLessThanOrEqual(size.width);
+  });
+  it('grows for content, retains attained height and caps at actual width', () => {
+    const area = {width:1920,height:1032};
+    expect(answerCardSize(area, 194.2)).toEqual({width:640,height:195});
+    expect(answerCardSize(area, 100, 210)).toEqual({width:640,height:210});
+    expect(answerCardSize(area, 900)).toEqual({width:640,height:640});
+    expect(answerCardSize({width:480,height:800}, 900)).toEqual({width:480,height:480});
+    expect(answerCardSize({width:320,height:200}, 900, 640)).toEqual({width:320,height:200});
+    expect(answerCardSize({width:900,height:200}, 900, 640)).toEqual({width:640,height:200});
+  });
+  it('preserves dragged position and only shifts inward at work area edges', () => {
+    const area = {x:-1280,y:40,width:1280,height:720};
+    expect(answerCardBounds(area,{x:-800,y:150},200)).toEqual({x:-800,y:150,width:640,height:200});
+    expect(answerCardBounds(area,{x:-300,y:580},900)).toEqual({x:-640,y:120,width:640,height:640});
+  });
+});
 describe('wheel and positioning', () => {
   it('selects the five intents clockwise starting at the top', () => {
     const center = { x: 500, y: 400 };

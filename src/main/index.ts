@@ -3,10 +3,10 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { InputBridge } from './inputBridge';
 import { physicalToLocal, type DisplayMap } from './coords';
-import { normalize, SettingsStore } from './settings';
+import { SettingsStore } from './settings';
 import { configCommand, type HelperEvent } from '../shared/protocol';
 import { isIntent, validRect, type CardState, type Intent, type Point, type StageState, type Target, type TranslationMode, type Turn, type UiEvent } from '../shared/types';
-import { pickGestureAction, toPixels, wheelCenter } from '../shared/geometry';
+import { answerCardBounds, answerCardSize, pickGestureAction, toPixels, wheelCenter } from '../shared/geometry';
 import { annotateBitmap } from './annotation';
 import { askModel, initialQuestion, messagesFor } from './model';
 import { SessionGate } from './sessionGate';
@@ -33,6 +33,7 @@ interface Session {
   request?: AbortController; requestId: number; intent?: Intent; slots: 4 | 5; image?: string; choosing?: boolean;
   translationMode: TranslationMode; translationRemainder: number;
   modelImages?: { annotated: string; focus: { image: string; rect: import('../shared/types').Rect } };
+  cardHeight?: number; cardContentHeight?: number;
 }
 
 function start(): void {
@@ -48,11 +49,13 @@ function start(): void {
   let session: Session | undefined;
   let enabled = true, quitting = false, testing = false;
   let settingsWindow: BrowserWindow | undefined, cardWindow: BrowserWindow | undefined;
+  let resizingCard = false;
 
   function createWindow(role: 'stage' | 'card' | 'settings', display?: Display): BrowserWindow {
     const workArea = screen.getPrimaryDisplay().workArea;
     const win = new BrowserWindow({
-      ...(display ? display.bounds : { width: Math.min(role === 'card' ? 440 : 1000, workArea.width), height: Math.min(role === 'card' ? 620 : 900, workArea.height) }),
+      ...(display ? display.bounds : role === 'card' ? answerCardSize(workArea) : { width: Math.max(700, Math.min(900, workArea.width)), height: Math.max(400, Math.min(560, workArea.height)) }),
+      ...(role === 'settings' ? { minWidth: 700, minHeight: 400 } : {}),
       show: false, frame: role === 'settings', transparent: role !== 'settings', backgroundColor: role === 'settings' ? '#f7f8fa' : '#00000000',
       resizable: role === 'settings', movable: role !== 'stage', minimizable: role === 'settings', maximizable: role === 'settings',
       focusable: role !== 'stage', skipTaskbar: role !== 'settings', alwaysOnTop: role !== 'settings', hasShadow: role !== 'stage', fullscreenable: false,
@@ -71,6 +74,7 @@ function start(): void {
     win.on('focus', syncSuspension); win.on('blur', () => setTimeout(syncSuspension, 0));
     win.on('closed', () => { ready.delete(win); syncSuspension(); });
     if (role === 'card') win.on('close', event => { if (!quitting) { event.preventDefault(); closeSession(); } });
+    if (role === 'card') win.on('moved', () => { if (!resizingCard && session?.card) resizeCard(session); });
     if (role === 'settings') win.on('close', event => { if (!quitting) { event.preventDefault(); win.hide(); syncSuspension(); } });
     return win;
   }
@@ -102,6 +106,17 @@ function start(): void {
     hideStages(); cardWindow?.hide(); send(cardWindow, { type: 'card', state: null }); syncSuspension();
   }
   function live(s: Session): boolean { return session === s && gate.current(s.token); }
+  function resizeCard(s: Session): void {
+    if (!live(s) || !s.card || !cardWindow || cardWindow.isDestroyed()) return;
+    const current = cardWindow.getBounds();
+    const area = screen.getDisplayMatching(current).workArea;
+    const next = answerCardBounds(area, current, s.cardContentHeight, s.cardHeight);
+    s.cardHeight = next.height;
+    if (current.x === next.x && current.y === next.y && current.width === next.width && current.height === next.height) return;
+    resizingCard = true;
+    try { cardWindow.setResizable(true); cardWindow.setBounds(next); }
+    finally { cardWindow.setResizable(false); resizingCard = false; }
+  }
   function displayMaps(): DisplayMap[] {
     return maps;
   }
@@ -194,16 +209,19 @@ function start(): void {
   async function showCard(s: Session, intent: Intent, error?: string): Promise<void> {
     if (!live(s)) return;
     s.intent = intent;
-    s.card = { id: s.id, image: s.image ?? '', target: s.shot ? toPixels(s.target, s.display.bounds, s.shot.getSize()) : s.target, intent, capturedAt: s.capturedAt, turns: error ? [{ question: '读取屏幕', answer: '', status: 'error', error }] : [], awaitingQuestion: intent === 'custom' && !error, translationMode: s.translationMode };
+    s.card = { id: s.id, image: s.image ?? '', target: s.shot ? toPixels(s.target, s.display.bounds, s.shot.getSize()) : s.target, intent, capturedAt: s.capturedAt, turns: error ? [{ question: '读取屏幕', answer: '', status: 'error', error }] : [], awaitingQuestion: intent === 'custom' && !error, translationMode: s.translationMode, answerFontSize: store.get().answerFontSize };
     hideStages(); s.stage = undefined;
     cardWindow ??= createWindow('card');
     await ready.get(cardWindow); if (!live(s)) return;
     const area = s.display.workArea;
-    const width = Math.min(440, area.width), height = Math.min(620, area.height);
     const anchor = s.target.kind === 'point' ? s.origin : s.target.rect;
-    const x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, s.display.bounds.x + anchor.x + 24)));
-    const y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, s.display.bounds.y + anchor.y + 24)));
-    cardWindow.setBounds({ x, y, width, height }); send(cardWindow, { type: 'card', state: s.card });
+    const bounds = answerCardBounds(area, { x: s.display.bounds.x + anchor.x + 24, y: s.display.bounds.y + anchor.y + 24 });
+    s.cardHeight = bounds.height; s.cardContentHeight = 160;
+    // Fixed-size Windows windows need their native size constraint released for a new work area.
+    resizingCard = true;
+    try { cardWindow.setResizable(true); cardWindow.setBounds(bounds); }
+    finally { cardWindow.setResizable(false); resizingCard = false; }
+    send(cardWindow, { type: 'card', state: s.card });
     if (intent === 'custom' && !error) { cardWindow.show(); cardWindow.focus(); }
     else cardWindow.showInactive();
     syncSuspension();
@@ -292,9 +310,7 @@ function start(): void {
     if (raw !== undefined && (!raw || typeof raw !== 'object' || Array.isArray(raw))) throw new Error('测试配置格式无效。');
     const draft = (raw ?? {}) as Record<string, unknown>;
     if (draft.apiKey !== undefined && (typeof draft.apiKey !== 'string' || draft.apiKey.length > 8192)) throw new Error('测试密钥格式无效。');
-    const config = normalize({ ...store.get(), ...draft });
-    if (!config.baseUrl || !config.model) throw new Error('请填写服务地址和模型名称。');
-    const key = typeof draft.apiKey === 'string' && draft.apiKey.trim() ? draft.apiKey.trim() : draft.clearKey === true ? '' : store.key();
+    const { config, key } = store.testConnection(draft);
     testing = true;
     const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 30_000);
     try {
@@ -331,6 +347,10 @@ function start(): void {
       await showCard(s, command.intent); if (live(s) && command.intent !== 'custom') void request(s, initialQuestion(command.intent, '')); return;
     }
     if (!isCard || !s.card) return;
+    if (command.type === 'cardHeight') {
+      if (typeof command.height !== 'number' || !Number.isFinite(command.height) || command.height < 0) return;
+      s.cardContentHeight = command.height; resizeCard(s); return;
+    }
     if (command.type === 'stop') stop(s);
     if (command.type === 'question' && typeof command.text === 'string' && command.text.trim() && command.text.length <= 8000 && !s.request) {
       void request(s, s.card.turns.length ? command.text.trim() : initialQuestion(s.intent!, command.text));
@@ -341,7 +361,7 @@ function start(): void {
     }
     if (command.type === 'settings') void openSettings();
     if (command.type === 'copy' && Number.isInteger(command.index)) {
-      const turn = s.card.turns[command.index as number]; if (turn?.answer) clipboard.writeText(turn.answer);
+      const turn = s.card.turns[command.index as number]; if (turn?.answer) await clipboard.writeText(turn.answer);
     }
     if (command.type === 'link' && typeof command.url === 'string') {
       let url: URL; try { url = new URL(command.url); } catch { return; }

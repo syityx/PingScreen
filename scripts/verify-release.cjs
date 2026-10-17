@@ -37,7 +37,7 @@ const thirdParty = fs.readFileSync(path.join(root, 'THIRD_PARTY_LICENSES.txt'), 
 assert(thirdParty.includes('Copyright (c) 2026 Danrui Meng'), 'Missing lolPing copyright');
 assert(thirdParty.includes('Permission is hereby granted, free of charge'), 'Missing upstream MIT permission');
 assert(thirdParty.includes('THE SOFTWARE IS PROVIDED "AS IS"'), 'Missing upstream MIT disclaimer');
-for (const name of files.filter(name => name.startsWith(path.join('out', 'renderer', 'assets')) && /\.(css|js|png|svg|ico)$/.test(name))) {
+for (const name of files.filter(name => name.startsWith(path.join('out', 'renderer', 'assets')) && /\.(css|js|png|svg|ico|otf)$/.test(name))) {
   assert(read(name).equals(fs.readFileSync(path.join(root, name))), `Outdated renderer ${name}`);
 }
 assert(!files.some(name => /(?:^|[\\/])(?:\.tools|tests|docs|\.git|\.env[^\\/]*|settings\.json[^\\/]*)(?:[\\/]|$)/.test(name)), 'Private/local development files included');

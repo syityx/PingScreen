@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ACTIONS, LABELS, type CardState, type Point, type StageState, type UiEvent, type WheelAction } from '../shared/types';
 import { DEAD_ZONE, pickAction, pickGestureAction, rectBetween, WHEEL_RADIUS } from '../shared/geometry';
@@ -15,7 +15,7 @@ function useEvents(callback: (event: UiEvent) => void): void {
   useEffect(() => api.onEvent(event => ref.current(event)), []);
 }
 function Brand({ compact = false }: { compact?: boolean }): React.JSX.Element {
-  return <div className={`brand ${compact ? 'compact' : ''}`}><span className="brand-mark"><Icon name="logo" size={compact ? 24 : 28} /></span><div><span>pingscreen</span>{!compact && <p>指向，选择，理解。</p>}</div></div>;
+  return <div className={`brand ${compact ? 'compact' : ''}`}><span className="brand-mark"><Icon name="logo" size={compact ? 24 : 28} /></span><div><span>{compact ? 'PingScreen' : 'pingscreen'}</span>{!compact && <p>指向，选择，理解。</p>}</div></div>;
 }
 const errorText = (error: unknown) => String(error instanceof Error ? error.message : error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
@@ -76,7 +76,7 @@ function Stage(): React.JSX.Element | null {
       if (selected.width >= 3 && selected.height >= 3) command('region', { rect: selected });
     }}>
     {state.image && <><img className="frozen-screen" src={state.image} draggable={false} /><div className="screen-shade" /></>}
-    <div className="stage-hint"><span className="hint-dot" />{translating ? `${state.translationMode === 'line' ? '条：翻译标点所在行的一段文字' : '点：翻译标点指向的内容'} · 滚轮切换` : state.mode === 'wheel' ? '拖向意图，松开提交' : state.mode === 'region' ? '拖动框选你关注的区域' : '点击轮盘选择意图'}<span className="hint-key">Esc 取消</span></div>
+    {state.mode === 'region' && <div className="stage-hint"><span className="hint-dot" />拖动框选你关注的区域<span className="hint-key">Esc 取消</span></div>}
     {rect ? <div className="selection-box" style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }} /> : <div className="target-ring" style={{ left: state.origin.x, top: state.origin.y }} />}
     {native && Math.hypot(state.origin.x - state.wheelCenter.x, state.origin.y - state.wheelCenter.y) > 1 && <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}><line x1={state.origin.x} y1={state.origin.y} x2={state.wheelCenter.x} y2={state.wheelCenter.y} stroke="#2878e8" strokeWidth="1" strokeDasharray="3 5" /></svg>}
     {state.mode !== 'region' && <Wheel state={state} cursor={cursor} onPick={state.mode === 'regionIntent' ? action => action ? command('intent', { intent: action }) : command('close') : undefined} />}
@@ -85,25 +85,15 @@ function Stage(): React.JSX.Element | null {
   </div>;
 }
 
-function Preview({ state }: { state: CardState }): React.JSX.Element {
-  const imageRef = useRef<HTMLImageElement>(null);
-  const [size, setSize] = useState({ width: 1, height: 1 });
-  const target = state.target;
-  const x = target.kind === 'point' ? target.point.x : target.rect.x;
-  const y = target.kind === 'point' ? target.point.y : target.rect.y;
-  const percent = { left: `${100 * x / size.width}%`, top: `${100 * y / size.height}%` };
-  return <div className="preview"><img ref={imageRef} src={state.image} onLoad={event => setSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} />
-    {target.kind === 'point' ? <span className="preview-dot" style={percent} /> : <span className="preview-rect" style={{ ...percent, width: `${100 * target.rect.width / size.width}%`, height: `${100 * target.rect.height / size.height}%` }} />}
-  </div>;
-}
 function Card(): React.JSX.Element | null {
   const [state, setState] = useState<CardState | null>(null);
   const [question, setQuestion] = useState(''), [notice, setNotice] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null), scrollRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null), followBottom = useRef(true);
   const stateRef = useRef(state); stateRef.current = state;
   const command = useCallback(async (type: string, extra = {}) => {
-    const s = stateRef.current; if (!s) return;
-    try { await api.command({ id: s.id, type, ...extra }); } catch (error) { setNotice(errorText(error)); }
+    const s = stateRef.current; if (!s) return false;
+    try { await api.command({ id: s.id, type, ...extra }); return true; } catch (error) { setNotice(errorText(error)); return false; }
   }, []);
   const onLink = useCallback((url: string) => { void command('link', { url }); }, [command]);
   useEvents(event => {
@@ -121,27 +111,51 @@ function Card(): React.JSX.Element | null {
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
   }, []);
   useEffect(() => { if (state?.awaitingQuestion) inputRef.current?.focus(); }, [state?.id, state?.awaitingQuestion]);
-  useEffect(() => { const el = scrollRef.current; if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 180) el.scrollTop = el.scrollHeight; }, [state?.turns.at(-1)?.answer]);
+  useLayoutEffect(() => {
+    const shell = shellRef.current, pane = scrollRef.current, id = state?.id;
+    if (!shell || !pane || !id) return;
+    const content = shell.querySelector<HTMLElement>('.card-content')!;
+    const header = shell.querySelector<HTMLElement>('.card-header')!;
+    const composer = shell.querySelector<HTMLElement>('.composer')!;
+    let timer: ReturnType<typeof setTimeout> | undefined, lastHeight = -1;
+    followBottom.current = true;
+    const measure = () => {
+      timer = undefined;
+      const paneStyle = getComputedStyle(pane), shellStyle = getComputedStyle(shell);
+      const height = Math.ceil(header.getBoundingClientRect().height + content.getBoundingClientRect().height + composer.getBoundingClientRect().height
+        + parseFloat(paneStyle.paddingTop) + parseFloat(paneStyle.paddingBottom) + parseFloat(shellStyle.borderTopWidth) + parseFloat(shellStyle.borderBottomWidth));
+      if (height !== lastHeight) {
+        lastHeight = height;
+        // Keep the originating session id, even if this message arrives after close.
+        void api.command({ type: 'cardHeight', id, height }).catch(() => {});
+      }
+    };
+    const changed = () => {
+      if (followBottom.current) pane.scrollTop = pane.scrollHeight;
+      timer ??= setTimeout(measure, 50);
+    };
+    const observer = new ResizeObserver(changed);
+    for (const element of [content, header, composer, pane]) observer.observe(element);
+    changed();
+    return () => { observer.disconnect(); if (timer !== undefined) clearTimeout(timer); };
+  }, [state?.id]);
   if (!state) return null;
   const last = state.turns.at(-1), busy = last?.status === 'generating';
   const submit = () => { if (!question.trim() || busy) return; void command('question', { text: question.trim() }); setQuestion(''); setNotice(''); };
-  return <div className="card-shell">
-    <header className="card-header"><Brand compact /><div className="header-actions"><button title="模型设置" aria-label="模型设置" onClick={() => void command('settings')}><Icon name="settings" size={18} /></button><button title="关闭" aria-label="关闭" onClick={() => void command('close')}><Icon name="close" size={18} /></button></div></header>
-    <div className="card-context"><span className="intent-badge"><Icon name={state.intent} size={14} />{LABELS[state.intent]}{state.intent === 'translate' && state.target.kind === 'point' ? ` · ${state.translationMode === 'line' ? '条' : '点'}` : ''}</span><span>快照 · {new Date(state.capturedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></div>
-    <div className="card-scroll" ref={scrollRef}>
-      {state.image && <details className="snapshot"><summary><Icon name="eye" size={16} /><span className="snapshot-title">查看 AI 所见画面</span><span>整屏 + 定位</span><Icon name="chevron" size={14} /></summary><Preview state={state} /></details>}
-      {state.awaitingQuestion && <div className="empty-state"><span className="empty-symbol"><Icon name="custom" size={28} /></span><h2>你想问这里什么？</h2><p>用一句话描述你的问题，<br />AI 会结合整屏与标点理解。</p></div>}
+  return <div className="card-shell" ref={shellRef} style={{ '--answer-font-size': `${state.answerFontSize}px` } as React.CSSProperties}>
+    <header className="card-header"><Brand compact /><button className="card-close" aria-label="关闭" onClick={() => void command('close')}><Icon name="close" size={18} /></button></header>
+    <div className="card-scroll" ref={scrollRef} onScroll={event => { const pane = event.currentTarget; followBottom.current = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 24; }}><div className="card-content">
       {state.turns.map((turn, index) => <section className="turn" key={index}>
-        <div className="question-label">{turn.question}</div>
+        {(index > 0 || state.intent === 'custom') && <div className="question-label">{turn.question}</div>}
         {turn.answer && <Suspense fallback={<div className="answer">{turn.answer}</div>}><Answer text={turn.answer} onLink={onLink} /></Suspense>}
-        {turn.status === 'generating' && <div className="thinking"><span className="thinking-dot" />{turn.answer ? '继续生成中' : '正在理解画面…'}</div>}
+        {turn.status === 'generating' && <div className="thinking" role="status" aria-label="正在生成回答"><span className="thinking-dot" /></div>}
         {turn.status === 'error' && <div className="error-box"><strong><Icon name="info" size={16} />{state.image ? '请求未完成' : '无法读取屏幕'}</strong><p>{turn.error}</p><div className="error-actions"><button onClick={() => void command('retry')}><Icon name="refresh" size={14} />{state.image ? '重试' : '关闭并重新标点'}</button><button onClick={() => void command('settings')}>检查设置</button></div></div>}
         {turn.status === 'stopped' && <span className="muted stopped-label"><Icon name="info" size={14} />生成已停止</span>}
-        {turn.answer && <div className="answer-tools"><button onClick={() => { void command('copy', { index }).then(() => { setNotice('已复制回答'); setTimeout(() => setNotice(''), 1800); }); }}><Icon name="copy" size={16} />复制回答</button></div>}
+        {turn.answer && <div className="answer-tools"><button title="复制回答" aria-label="复制回答" onClick={() => { void command('copy', { index }).then(ok => { if (ok) { setNotice('已复制回答'); setTimeout(() => setNotice(''), 1800); } }); }}><Icon name="copy" size={16} /></button></div>}
       </section>)}
-    </div>
-    <div className="composer"><textarea ref={inputRef} maxLength={8000} rows={2} placeholder={state.awaitingQuestion ? '描述你的问题…' : '继续问这张画面…'} value={question} onChange={event => setQuestion(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } }} />
-      <div className="composer-footer"><span role="status" className={notice === '已复制回答' ? 'copy-notice' : ''}>{notice || 'Enter 发送 · Shift + Enter 换行'}</span>{busy ? <button className="stop" onClick={() => void command('stop')}><Icon name="stop" size={14} />停止生成</button> : <button className="primary small" disabled={!question.trim() || !state.image} onClick={submit}>发送<Icon name="send" size={16} /></button>}</div>
+    </div></div>
+    <div className="composer"><span role="status" className={`composer-notice ${notice === '已复制回答' ? 'copy-notice' : ''}`}>{notice}</span><div className="composer-row"><textarea ref={inputRef} aria-label="输入问题" maxLength={8000} rows={1} value={question} onChange={event => setQuestion(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } }} />
+      {busy ? <button className="composer-send stop" title="停止生成" aria-label="停止生成" onClick={() => void command('stop')}><Icon name="stop" size={18} /></button> : <button className="composer-send primary" title="发送" aria-label="发送" disabled={!question.trim() || !state.image} onClick={submit}><Icon name="send" size={20} /></button>}</div>
     </div>
   </div>;
 }

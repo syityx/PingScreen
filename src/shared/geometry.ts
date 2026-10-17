@@ -1,6 +1,18 @@
 import { ACTIONS, type Point, type Rect, type Target, type WheelAction } from './types';
 export const WHEEL_RADIUS = 116;
 export const DEAD_ZONE = 33;
+export function answerCardSize(workArea: { width: number; height: number }, contentHeight = 160, previousHeight = 160): { width: number; height: number } {
+  const width = Math.floor(Math.min(640, workArea.width));
+  const maximum = Math.floor(Math.min(width, workArea.height));
+  return { width, height: Math.min(maximum, Math.ceil(Math.max(160, contentHeight, previousHeight))) };
+}
+export function answerCardBounds(workArea: Rect, position: Point, contentHeight = 160, previousHeight = 160): Rect {
+  const size = answerCardSize(workArea, contentHeight, previousHeight);
+  return { ...size,
+    x: Math.round(Math.max(workArea.x, Math.min(workArea.x + workArea.width - size.width, position.x))),
+    y: Math.round(Math.max(workArea.y, Math.min(workArea.y + workArea.height - size.height, position.y))),
+  };
+}
 export function pickAction(cursor: Point, center: Point, slots: 4 | 5): WheelAction | null {
   const dx = cursor.x - center.x, dy = cursor.y - center.y;
   if (Math.hypot(dx, dy) < DEAD_ZONE) return null;
