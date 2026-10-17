@@ -54,7 +54,8 @@ function start(): void {
   function createWindow(role: 'stage' | 'card' | 'settings', display?: Display): BrowserWindow {
     const workArea = screen.getPrimaryDisplay().workArea;
     const win = new BrowserWindow({
-      ...(display ? display.bounds : role === 'card' ? answerCardSize(workArea) : { width: Math.min(1000, workArea.width), height: Math.min(900, workArea.height) }),
+      ...(display ? display.bounds : role === 'card' ? answerCardSize(workArea) : { width: Math.max(700, Math.min(900, workArea.width)), height: Math.max(400, Math.min(560, workArea.height)) }),
+      ...(role === 'settings' ? { minWidth: 700, minHeight: 400 } : {}),
       show: false, frame: role === 'settings', transparent: role !== 'settings', backgroundColor: role === 'settings' ? '#f7f8fa' : '#00000000',
       resizable: role === 'settings', movable: role !== 'stage', minimizable: role === 'settings', maximizable: role === 'settings',
       focusable: role !== 'stage', skipTaskbar: role !== 'settings', alwaysOnTop: role !== 'settings', hasShadow: role !== 'stage', fullscreenable: false,

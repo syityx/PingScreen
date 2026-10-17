@@ -9,6 +9,7 @@ import type { SettingsStore } from './settings';
 import { version } from '../../package.json';
 import { runCardLayoutSmoke } from './smokeCardLayout';
 import { runProviderSmoke } from './smokeProviders';
+import { runSettingsInterfaceSmoke } from './smokeSettingsInterface';
 interface SmokeSession { id: string; card?: CardState; stage?: StageState; origin: Point; wheelCenter: Point; release?: Point; translationMode: TranslationMode; display: Display; request?: AbortController }
 export interface Harness { handle(event: HelperEvent): void; getSession(): SmokeSession | undefined; getSettings(): BrowserWindow | undefined; getCard(): BrowserWindow | undefined; getStage(): BrowserWindow | undefined; store: SettingsStore; closeSession(): void }
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -43,6 +44,11 @@ export async function runSmoke(h: Harness): Promise<void> {
     await until(() => h.getSettings()?.webContents.isLoading() === false, 'settings loaded'); await delay(200);
     progress('Settings loaded');
     const settings = h.getSettings()!;
+    const workArea = screen.getPrimaryDisplay().workArea;
+    const initialSettings = settings.getBounds();
+    // Forced fractional DPI can round the native framed window's invisible borders by 2–3 DIP.
+    const frameRounding = forcedScale ? 4 : 1;
+    if (Math.abs(initialSettings.width - Math.max(700, Math.min(900, workArea.width))) > frameRounding || Math.abs(initialSettings.height - Math.max(400, Math.min(560, workArea.height))) > frameRounding || settings.getMinimumSize().join(',') !== '700,400' || !settings.isResizable() || !settings.isMovable()) throw new Error('Settings window geometry mismatch: ' + JSON.stringify(initialSettings));
     const title = await Promise.race([settings.webContents.executeJavaScript('document.querySelector("h1")?.textContent'), delay(3000).then(() => { throw new Error('Settings renderer evaluation timed out'); })]);
     progress('Settings evaluated: ' + title);
     if (title !== '设置') throw new Error('Settings failed to render');
@@ -64,7 +70,9 @@ export async function runSmoke(h: Harness): Promise<void> {
       })()`);
     };
     const scrollStyles=await settings.webContents.executeJavaScript(`({snap:getComputedStyle(document.querySelector('.settings-content')).scrollSnapType,smooth:getComputedStyle(document.querySelector('.settings-content')).scrollBehavior,sections:document.querySelectorAll('[data-section]').length})`);
-    if(!/^y(?: proximity)?$/.test(scrollStyles.snap)||scrollStyles.sections!==4) throw new Error('Missing continuous snap layout: '+JSON.stringify(scrollStyles));
+    if(scrollStyles.snap!=='none'||scrollStyles.sections!==4) throw new Error('Unexpected settings scroll snap: '+JSON.stringify(scrollStyles));
+    const settingsCopy = await settings.webContents.executeJavaScript(`({extra:document.querySelectorAll('.settings-heading>p,.settings-row p,.note,.security-panel,.test-note,.panel-heading,.field-note,.wheel-help,.status-action-label,.autosave-message').length,ready:document.querySelector('.runtime-status h2').textContent,hint:!!document.querySelector('.runtime-status p'),key:document.querySelector('input[type=password]').placeholder})`);
+    if(settingsCopy.extra || settingsCopy.hint || settingsCopy.ready!=='已就绪' || settingsCopy.key!=='本地服务可留空') throw new Error('Concise settings copy failed: '+JSON.stringify(settingsCopy));
     await settings.webContents.executeJavaScript(`const field=document.querySelector('input[placeholder="填写支持图片输入的模型名称"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(field,'draft-model');field.dispatchEvent(new Event('input',{bubbles:true}))`);
     for (const tab of ['gesture','wheel','app']) {
       await navigateSettings(tab);
@@ -122,7 +130,7 @@ export async function runSmoke(h: Harness): Promise<void> {
     await editField('#answer-font-size','16');
     await until(()=>h.store.get().answerFontSize===16,'restore default reading preference');
     await until(async()=>await settings.webContents.executeJavaScript(`document.querySelector('#answer-font-size').value`)==='16','restore font control');
-    await until(async()=>await settings.webContents.executeJavaScript(`document.querySelector('[data-section=app] .autosave-message').textContent`)==='已自动保存','font save feedback settled');
+    await until(async()=>await settings.webContents.executeJavaScript(`document.querySelector('.autosave-message')===null`),'successful automatic save has no feedback');
     await navigateSettings('app');
     await snapshot(settings,join(dir,'settings-reading.png'));
     results.push('Answer font range 14-24/default 16/step 1; rapid automatic saves; persisted reload value; failed save rollback; model drafts isolated');
@@ -154,27 +162,14 @@ export async function runSmoke(h: Harness): Promise<void> {
     await navigateSettings('model');
     await runProviderSmoke(settings, h.store, `http://127.0.0.1:${address.port}/v1`, packets);
     results.push('Provider dropdowns, keyboard selection, DeepSeek-Flash, custom local synthetic-image request, per-provider drafts and secrets, explicit save/reload/clear and narrow layout; cloud network simulated');
-    await settings.webContents.executeJavaScript(`(()=>{const root=document.querySelector('.settings-content');root.dispatchEvent(new WheelEvent('wheel'));root.scrollTo({top:document.querySelector('[data-section=gesture]').offsetTop,behavior:'instant'});})()`);await delay(120);
-    if(await settings.webContents.executeJavaScript(`document.querySelector('.nav-item.active').dataset.tab`)!=='gesture') throw new Error('Scrolling did not update sidebar');
-    // Wheel input near a section boundary should settle on its native CSS snap point.
+    await runSettingsInterfaceSmoke(settings, dir);
     await navigateSettings('model');
-    const gestureTop=await settings.webContents.executeJavaScript(`document.querySelector('[data-section=gesture]').offsetTop`);
-    settings.webContents.sendInputEvent({type:'mouseWheel',x:800,y:400,deltaX:0,deltaY:-gestureTop+30,canScroll:true});await delay(1200);
-    const wheelScroll=await settings.webContents.executeJavaScript(`({active:document.querySelector('.nav-item.active').dataset.tab,top:document.querySelector('.settings-content').scrollTop,target:document.querySelector('[data-section=gesture]').offsetTop})`);
-    if(wheelScroll.active!=='gesture'||Math.abs(wheelScroll.top-wheelScroll.target)>2) throw new Error('Wheel scroll snap failed: '+JSON.stringify(wheelScroll));
-    settings.setSize(500,720); await delay(100);
-    for(const tab of ['model','gesture','wheel','app']){await navigateSettings(tab);await checkLayout(settings,'narrow '+tab);}
-    await settings.webContents.executeJavaScript(`document.querySelector('.settings-content').scrollTo({top:document.querySelector('.settings-content').scrollHeight,behavior:'instant'})`);await delay(100);
-    const footerFits=await settings.webContents.executeJavaScript(`document.querySelector('.copyright').getBoundingClientRect().bottom<=document.querySelector('.settings-content').getBoundingClientRect().bottom+2`);
-    if(!footerFits) throw new Error('Tall section trapped the copyright footer');
-    const bottomGap=await settings.webContents.executeJavaScript(`document.querySelector('.settings-content').getBoundingClientRect().bottom-document.querySelector('.copyright').getBoundingClientRect().bottom`);
-    if(bottomGap>17) throw new Error('Extra blank space after copyright: '+bottomGap);
-    settings.webContents.sendInputEvent({type:'mouseWheel',x:350,y:600,deltaX:0,deltaY:-1000,canScroll:true});await delay(120);
-    if(await settings.webContents.executeJavaScript(`Math.abs(document.querySelector('.settings-content').scrollTop-(document.querySelector('.settings-content').scrollHeight-document.querySelector('.settings-content').clientHeight))`)>2) throw new Error('Scrolling passed the bottom boundary');
-    await snapshot(settings,join(dir,'settings-narrow.png')); settings.setSize(1000,900);await delay(100);
-    await navigateSettings('model');
-    results.push('Compact natural-height settings without section gaps; two-line about; removed session note; clicked lolPing GitHub link; smooth navigation, native snap, automatic sidebar, narrow footer and bottom boundary');
+    results.push('Compact 15px/20px settings, 900x560 default/700x400 minimum, collapsible accessible sidebar, failure-only auto-save, natural scrolling and interruptible latest-target navigation; see settings-interface.json');
     progress('Settings preview attempted');
+    if (app.commandLine.hasSwitch('smoke-settings-only')) {
+      writeFileSync(join(dir,'results.json'),JSON.stringify({passed:results,scope:'settings'},null,2));
+      clearTimeout(deadline); console.log('SETTINGS SMOKE PASSED'); server.close(); app.quit(); return;
+    }
     const d = screen.getPrimaryDisplay();
     const physical = screen.dipToScreenRect(null, d.bounds);
     const origin = { x: physical.x + Math.round(physical.width/2), y: physical.y + Math.round(physical.height/2) };
@@ -321,6 +316,7 @@ export async function runSmoke(h: Harness): Promise<void> {
     await delay(120);
     const modeLabel=await translationStage.webContents.executeJavaScript('document.querySelector("[data-action=translate]")?.getAttribute("aria-label")');
     if(modeLabel!=='翻译 · 条') throw new Error('Wheel mode label missing: '+modeLabel);
+    if(await translationStage.webContents.executeJavaScript(`!!document.querySelector('.stage-hint') || !document.querySelector('.wheel-caption').textContent.includes('条')`)) throw new Error('Translation banner shown or nearby scope hidden');
     if(await translationStage.webContents.executeJavaScript(`document.querySelectorAll('.wheel text').length`)!==0) throw new Error('Wheel should contain icons only');
     await snapshot(translationStage,join(dir,'translation-wheel.png'));
     h.handle({type:'cancel'}); await delay(180);
@@ -332,6 +328,11 @@ export async function runSmoke(h: Harness): Promise<void> {
     if(!pointPacket.messages[1].content[0].text.includes('翻译模式：点')) throw new Error('Default translation did not use point prompt');
     if(JSON.stringify(pointPacket.messages[1].content.slice(1))!==JSON.stringify(linePacket.messages[1].content.slice(1))) throw new Error('Prompt mode unexpectedly changed the screenshot or detail crop');
     h.store.save({wheelSlots:4}); const four=translatePoint(4);
+    emit('wheelOpen',origin.x,origin.y);emit('wheelMove',four.x,four.y);
+    await until(()=>h.getSession()?.stage?.image,'four-slot wheel image'); await delay(100);
+    if(await h.getStage()!.webContents.executeJavaScript(`!!document.querySelector('.stage-hint') || document.querySelectorAll('.slice').length!==4`)) throw new Error('Four-slot wheel top banner or missing slices');
+    await snapshot(h.getStage()!,join(dir,'wheel-four.png'));
+    h.handle({type:'cancel'});
     emit('wheelOpen',origin.x,origin.y);emit('wheelMove',four.x,four.y);scroll(120,four);emit('wheelRelease',four.x,four.y);
     await until(()=>h.getSession()?.card?.turns.at(-1)?.status==='done','four-slot line translation');
     if(h.getSession()?.card?.translationMode!=='line') throw new Error('Four-slot translation mode failed');
@@ -356,15 +357,19 @@ export async function runSmoke(h: Harness): Promise<void> {
     await until(()=>h.getSession()?.stage?.image, 'frozen PNG arrives'); await delay(150);
     results.push('Wheel visible before PNG; no blank image while pending; 1000 same-sector moves send no redundant UI packets');
     const stage = h.getStage()!;
+    if(await stage.webContents.executeJavaScript(`!!document.querySelector('.stage-hint') || !document.querySelector('.wheel-caption')`)) throw new Error('Five-slot banner or missing nearby feedback');
+    if(stage.getBounds().width!==d.bounds.width || stage.getBounds().height!==d.bounds.height || card.getBounds().width>640) throw new Error('Settings geometry leaked to another window role');
     await snapshot(stage, join(dir,'wheel.png'));
     // fifth slice: 198 degrees from +x (top + 4*72 degrees).
     emit('wheelRelease',origin.x - Math.round(90*d.scaleFactor),origin.y - Math.round(29*d.scaleFactor));
     await until(() => h.getSession()?.stage?.mode === 'region', 'region mode');
+    await until(async()=>await stage.webContents.executeJavaScript(`document.querySelector('.stage-hint')?.textContent.includes('拖动框选')`),'region instruction retained');
     const id = h.getSession()!.id;
     await stage.webContents.executeJavaScript('window.pingscreen.command({type:"region",id:' + JSON.stringify(id) + ',rect:{x:100,y:100,width:250,height:180}})');
     await until(() => h.getSession()?.stage?.mode === 'regionIntent', 'region intent'); await delay(150);
     const slices = await stage.webContents.executeJavaScript('document.querySelectorAll(".slice").length');
     if (slices !== 4) throw new Error('Expected four region intents');
+    if(await stage.webContents.executeJavaScript(`!!document.querySelector('.stage-hint')`)) throw new Error('Region intent wheel still shows top banner');
     await snapshot(stage, join(dir,'region.png'));
     await stage.webContents.executeJavaScript('document.querySelector(".slice").dispatchEvent(new MouseEvent("click",{bubbles:true}))');
     await until(() => h.getSession()?.card?.turns.at(-1)?.status === 'done','region answer');

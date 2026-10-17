@@ -64,8 +64,8 @@ export async function runProviderSmoke(win: BrowserWindow, store: SettingsStore,
   if (await value('input[type=url]') !== localBase) throw new Error('Custom address lost');
   await click('.settings-buttons button:last-child'); await until(() => store.get().provider === 'custom', 'restore active profile');
   await input('#answer-font-size', '16'); await until(() => store.get().answerFontSize === 16, 'restore font');
-  win.setSize(500, 720); await delay(100);
+  win.setSize(700, 400); await delay(100);
   for (const provider of ['custom', 'deepseek', 'doubao']) { await select('服务商', provider); await checkLayout(); await snapshot(`settings-provider-${provider}-narrow.png`); }
-  await select('服务商', 'custom'); win.setSize(1000, 900);
+  await select('服务商', 'custom'); win.setSize(900, 560);
   packets.length = 0;
 }

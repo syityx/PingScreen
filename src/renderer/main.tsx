@@ -76,7 +76,7 @@ function Stage(): React.JSX.Element | null {
       if (selected.width >= 3 && selected.height >= 3) command('region', { rect: selected });
     }}>
     {state.image && <><img className="frozen-screen" src={state.image} draggable={false} /><div className="screen-shade" /></>}
-    <div className="stage-hint"><span className="hint-dot" />{translating ? `${state.translationMode === 'line' ? '条：翻译标点所在行的一段文字' : '点：翻译标点指向的内容'} · 滚轮切换` : state.mode === 'wheel' ? '拖向意图，松开提交' : state.mode === 'region' ? '拖动框选你关注的区域' : '点击轮盘选择意图'}<span className="hint-key">Esc 取消</span></div>
+    {state.mode === 'region' && <div className="stage-hint"><span className="hint-dot" />拖动框选你关注的区域<span className="hint-key">Esc 取消</span></div>}
     {rect ? <div className="selection-box" style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }} /> : <div className="target-ring" style={{ left: state.origin.x, top: state.origin.y }} />}
     {native && Math.hypot(state.origin.x - state.wheelCenter.x, state.origin.y - state.wheelCenter.y) > 1 && <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}><line x1={state.origin.x} y1={state.origin.y} x2={state.wheelCenter.x} y2={state.wheelCenter.y} stroke="#2878e8" strokeWidth="1" strokeDasharray="3 5" /></svg>}
     {state.mode !== 'region' && <Wheel state={state} cursor={cursor} onPick={state.mode === 'regionIntent' ? action => action ? command('intent', { intent: action }) : command('close') : undefined} />}
