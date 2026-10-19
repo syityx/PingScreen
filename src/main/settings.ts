@@ -1,8 +1,9 @@
 import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ANSWER_FONT_SIZE, type PublicSettings, type Settings } from '../shared/types';
+import { defaultWheelActions, loadWheel, validateWheel } from '../shared/wheel';
 import { isProviderId, normalizeProfile, PROVIDER_IDS, type ConnectionProfile, type ProviderId, type PublicProfile } from '../shared/providers';
-export const DEFAULTS: Settings = { provider: 'custom', baseUrl: '', model: '', trigger: 'alt', wheelSlots: 5, dragThresholdPx: 8, launchAtStartup: false, stream: true, answerFontSize: ANSWER_FONT_SIZE.default };
+export const DEFAULTS: Settings = { provider: 'custom', baseUrl: '', model: '', trigger: 'alt', wheelSlots: 5, wheelActions: defaultWheelActions(), dragThresholdPx: 8, launchAtStartup: false, stream: true, answerFontSize: ANSWER_FONT_SIZE.default };
 export function endpoint(base: string): string {
   const u = new URL(base.trim());
   if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.search || u.hash) throw new Error('模型地址需要是 HTTP/HTTPS 地址，且不包含用户名、密码或查询参数。');
@@ -12,7 +13,7 @@ export function endpoint(base: string): string {
 export function normalize(raw: unknown): Settings {
   const s = raw && typeof raw === 'object' ? raw as Partial<Settings> : {};
   const provider = isProviderId(s.provider) ? s.provider : 'custom';
-  return { provider, ...normalizeProfile(provider, s), trigger: ['alt','ctrl','shift','mouse4','mouse5'].includes(s.trigger ?? '') ? s.trigger! : 'alt', wheelSlots: s.wheelSlots === 4 ? 4 : 5, dragThresholdPx: typeof s.dragThresholdPx === 'number' && Number.isFinite(s.dragThresholdPx) ? Math.round(Math.max(3, Math.min(40, s.dragThresholdPx))) : 8, launchAtStartup: s.launchAtStartup === true, answerFontSize: typeof s.answerFontSize === 'number' && Number.isFinite(s.answerFontSize) ? Math.round(Math.max(ANSWER_FONT_SIZE.min, Math.min(ANSWER_FONT_SIZE.max, s.answerFontSize))) : ANSWER_FONT_SIZE.default };
+  return { provider, ...normalizeProfile(provider, s), trigger: ['alt','ctrl','shift','mouse4','mouse5'].includes(s.trigger ?? '') ? s.trigger! : 'alt', ...loadWheel(s), dragThresholdPx: typeof s.dragThresholdPx === 'number' && Number.isFinite(s.dragThresholdPx) ? Math.round(Math.max(3, Math.min(40, s.dragThresholdPx))) : 8, launchAtStartup: s.launchAtStartup === true, answerFontSize: typeof s.answerFontSize === 'number' && Number.isFinite(s.answerFontSize) ? Math.round(Math.max(ANSWER_FONT_SIZE.min, Math.min(ANSWER_FONT_SIZE.max, s.answerFontSize))) : ANSWER_FONT_SIZE.default };
 }
 export interface SecretStorage { isEncryptionAvailable(): boolean; encryptString(value: string): Buffer; decryptString(value: Buffer): string }
 type StoredProfile = ConnectionProfile & { encryptedKey: string };
@@ -28,7 +29,7 @@ export class SettingsStore {
     if (existsSync(this.file)) {
       try {
         const raw = object(JSON.parse(readFileSync(this.file, 'utf8')));
-        this.needsBackup = raw.version !== 2;
+        this.needsBackup = raw.version !== 2 || !Object.hasOwn(raw, 'wheelActions');
         if (raw.version === 2) {
           for (const id of PROVIDER_IDS) {
             const profile = object(object(raw.profiles)[id]);
@@ -44,7 +45,7 @@ export class SettingsStore {
       catch { this.keyProblem = '设置文件无法读取，请重新配置。原文件将在保存时备份。'; }
     }
   }
-  get(): Settings { return { ...this.current }; }
+  get(): Settings { return { ...this.current, wheelActions: this.current.wheelActions.map(s => ({ ...s })) }; }
   key(provider: ProviderId = this.current.provider ?? 'custom'): string {
     const encrypted = this.profiles[provider].encryptedKey;
     if (!encrypted) return '';
@@ -82,7 +83,8 @@ export class SettingsStore {
   save(raw: unknown): PublicSettings {
     const { patch, provider, profile } = this.draft(raw);
     const connectionChanged = ['provider', 'baseUrl', 'model', 'stream', 'apiKey', 'clearKey'].some(field => Object.hasOwn(patch, field));
-    const next = normalize({ ...this.current, ...Object.fromEntries(['trigger', 'wheelSlots', 'dragThresholdPx', 'launchAtStartup', 'answerFontSize'].filter(field => Object.hasOwn(patch, field)).map(field => [field, patch[field]])), ...(connectionChanged ? { ...profile, provider } : {}) });
+    if (Object.hasOwn(patch, 'wheelSlots') || Object.hasOwn(patch, 'wheelActions')) validateWheel({ ...this.current, ...patch });
+    const next = normalize({ ...this.current, ...Object.fromEntries(['trigger', 'wheelSlots', 'wheelActions', 'dragThresholdPx', 'launchAtStartup', 'answerFontSize'].filter(field => Object.hasOwn(patch, field)).map(field => [field, patch[field]])), ...(connectionChanged ? { ...profile, provider } : {}) });
     let encrypted = this.profiles[provider].encryptedKey;
     if (patch.clearKey === true) encrypted = '';
     else if (typeof patch.apiKey === 'string' && patch.apiKey.trim()) {

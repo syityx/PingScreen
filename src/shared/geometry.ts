@@ -13,17 +13,24 @@ export function answerCardBounds(workArea: Rect, position: Point, contentHeight 
     y: Math.round(Math.max(workArea.y, Math.min(workArea.y + workArea.height - size.height, position.y))),
   };
 }
-export function pickAction(cursor: Point, center: Point, slots: 4 | 5): WheelAction | null {
+export function pickAction(cursor: Point, center: Point, slots: 4 | 5): WheelAction | null;
+export function pickAction(cursor: Point, center: Point, slots: readonly { id: string }[]): string | null;
+export function pickAction(cursor: Point, center: Point, slots: 4 | 5 | readonly { id: string }[]): string | null {
   const dx = cursor.x - center.x, dy = cursor.y - center.y;
   if (Math.hypot(dx, dy) < DEAD_ZONE) return null;
-  const step = 2 * Math.PI / slots;
+  const count = typeof slots === 'number' ? slots : slots.length;
+  if (!count) return null;
+  const step = 2 * Math.PI / count;
   const angle = ((Math.atan2(dy, dx) + Math.PI / 2 + step / 2) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-  return ACTIONS[Math.floor(angle / step)] ?? null;
+  const index = Math.floor(angle / step);
+  return typeof slots === 'number' ? ACTIONS[index] ?? null : slots[index]?.id ?? null;
 }
-export function pickGestureAction(cursor: Point, origin: Point, center: Point, slots: 4 | 5): WheelAction | null {
+export function pickGestureAction(cursor: Point, origin: Point, center: Point, slots: 4 | 5): WheelAction | null;
+export function pickGestureAction(cursor: Point, origin: Point, center: Point, slots: readonly { id: string }[]): string | null;
+export function pickGestureAction(cursor: Point, origin: Point, center: Point, slots: 4 | 5 | readonly { id: string }[]): string | null {
   // A clamped visual wheel must still cancel when the user returns to the original target.
   if (Math.hypot(cursor.x - origin.x, cursor.y - origin.y) < DEAD_ZONE) return null;
-  return pickAction(cursor, center, slots);
+  return typeof slots === 'number' ? pickAction(cursor, center, slots) : pickAction(cursor, center, slots);
 }
 export function wheelCenter(p: Point, bounds: { width: number; height: number }): Point {
   const margin = WHEEL_RADIUS + 12;

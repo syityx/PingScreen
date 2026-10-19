@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ANSWER_FONT_SIZE, type PublicSettings, type Status } from '../shared/types';
 import { PROVIDERS, providerFor, type ProviderId, type ConnectionProfile } from '../shared/providers';
 import { Icon, type IconName } from './Icons';
-import wheelFive from './assets/wheels/wheel-5-idle.svg';
-import wheelFour from './assets/wheels/wheel-4-idle.svg';
+import { WheelEditor, type WheelEditorHandle } from './WheelEditor';
 import { version } from '../../package.json';
 
 const api = window.pingscreen;
@@ -23,6 +22,8 @@ export function Settings(): React.JSX.Element {
   const [status, setStatus] = useState<Status>({ helper: 'starting', enabled: true });
   const [tab, setTab] = useState('model');
   const [collapsed, setCollapsed] = useState(false);
+  const [wheelEditing, setWheelEditing] = useState(false), [wheelBlocking, setWheelBlocking] = useState(false);
+  const wheelEditor = useRef<WheelEditorHandle>(null), savedScroll = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigation = useRef<string | null>(null);
   const animation = useRef(0);
@@ -37,11 +38,20 @@ export function Settings(): React.JSX.Element {
   const [otherModels, setOtherModels] = useState<Partial<Record<ProviderId, boolean>>>({});
   const [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [failed, setFailed] = useState(false);
   useEffect(() => {
-    const unsubscribe = api.onEvent(event => { if (event.type === 'status') setStatus(event.state); });
+    const unsubscribe = api.onEvent(event => {
+      if (event.type === 'status') setStatus(event.state);
+      if (event.type === 'settingsClose') {
+        const hide = () => { void api.command({ type: 'closeSettings' }); };
+        if (wheelEditor.current) wheelEditor.current.leave(hide); else hide();
+      }
+    });
     void api.init().then(data => { setSettings(data.settings); setProvider(data.settings.provider); if (data.status) setStatus(data.status); }).catch(error => { setMessage(errorText(error)); setFailed(true); });
     return unsubscribe;
   }, []);
   const loaded = settings !== null;
+  useLayoutEffect(() => {
+    if (!wheelEditing && scrollRef.current) scrollRef.current.scrollTop = savedScroll.current;
+  }, [wheelEditing]);
   useEffect(() => {
     const root = scrollRef.current; if (!root) return;
     let frame = 0;
@@ -50,6 +60,7 @@ export function Settings(): React.JSX.Element {
     const cancelAnimation = () => { cancelAnimationFrame(animation.current); animation.current = 0; };
     const track = () => {
       frame = 0;
+      if (wheelEditor.current?.active) return;
       const anchor = root.getBoundingClientRect().top + 48;
       const sections = Array.from(root.querySelectorAll<HTMLElement>('[data-section]'));
       const atBottom = root.scrollTop >= root.scrollHeight - root.clientHeight - 2;
@@ -74,6 +85,7 @@ export function Settings(): React.JSX.Element {
     root.addEventListener('pointerdown', scrollbarDown);
     root.addEventListener('keydown', scrollKey);
     const resize = new ResizeObserver(() => {
+      if (wheelEditor.current?.active) return;
       if (size.width === root.clientWidth && size.height === root.clientHeight) return;
       size = { width: root.clientWidth, height: root.clientHeight };
       cancelAnimation();
@@ -174,15 +186,15 @@ export function Settings(): React.JSX.Element {
   const feedback = message && <div className={`save-message ${failed ? 'warning' : 'success'}`} role="status"><Icon name={failed ? 'info' : 'check'} size={16} /><span>{message}</span></div>;
   const autoFeedback = autoFailed && <p className="autosave-message warning" role="status"><Icon name="info" size={14} />{autoMessage}</p>;
   return <main className={`settings-shell${collapsed ? ' sidebar-collapsed' : ''}`}>
-    <aside className="settings-sidebar">
+    <aside className="settings-sidebar" hidden={wheelEditing} inert={wheelBlocking}>
       <div className="sidebar-header">
       <div className="brand"><span className="brand-mark"><Icon name="logo" size={30} /></span><div><span>pingscreen</span><p>指向，选择，理解。</p></div></div>
       <button type="button" className="sidebar-toggle" aria-label={collapsed ? '展开侧栏' : '收起侧栏'} title={collapsed ? '展开侧栏' : '收起侧栏'} aria-expanded={!collapsed} aria-controls="settings-sidebar-navigation" onClick={() => setCollapsed(value => !value)}><Icon name="chevron" size={18} /></button>
       </div>
-      <nav id="settings-sidebar-navigation" aria-label="设置分类">{tabs.map(item => <button key={item.id} data-tab={item.id} aria-label={item.label} title={collapsed ? item.label : undefined} className={`nav-item ${tab === item.id ? 'active' : ''}`} aria-controls={`settings-${item.id}`} aria-current={tab === item.id ? 'location' : undefined} onClick={() => navigate(item.id)}><Icon name={item.icon} size={22} /><span>{item.label}</span></button>)}</nav>
+      <nav id="settings-sidebar-navigation" aria-label="设置分类">{tabs.map(item => <button key={item.id} data-tab={item.id} aria-label={item.label} title={collapsed ? item.label : undefined} className={`nav-item ${tab === item.id ? 'active' : ''}`} aria-controls={`settings-${item.id}`} aria-current={tab === item.id ? 'location' : undefined} onClick={() => wheelEditor.current?.leave(() => navigate(item.id))}><Icon name={item.icon} size={22} /><span>{item.label}</span></button>)}</nav>
       <div className="sidebar-help"><p>{gesture}</p><p>Ctrl + Alt + P 暂停 / 恢复</p><p>v{version} · Windows</p></div>
     </aside>
-    <div className="settings-content" ref={scrollRef} tabIndex={0} aria-label="配置页，向下滚动查看更多设置">
+    <div className="settings-content" hidden={wheelEditing} ref={scrollRef} tabIndex={0} aria-label="配置页，向下滚动查看更多设置">
       <section className="settings-page" id="settings-model" data-section="model" aria-label="模型连接">
       <div className="settings-topbar">
       <header className="settings-heading"><h1>设置</h1></header>
@@ -217,7 +229,14 @@ export function Settings(): React.JSX.Element {
       </section>
       <section className="settings-page" id="settings-wheel" data-section="wheel" aria-label="轮盘">
           <header className="settings-heading"><h2>轮盘</h2></header>
-          <section className="settings-panel wheel-layout"><div><h3>轮盘布局</h3><div className="layout-options" role="group" aria-label="轮盘布局"><button aria-pressed={settings.wheelSlots === 5} className={settings.wheelSlots === 5 ? 'primary' : ''} onClick={() => autoSave({ wheelSlots: 5 })}>五项 · 包含框选</button><button aria-pressed={settings.wheelSlots === 4} className={settings.wheelSlots === 4 ? 'primary' : ''} onClick={() => autoSave({ wheelSlots: 4 })}>四项 · 快速标点</button></div></div><img src={settings.wheelSlots === 5 ? wheelFive : wheelFour} width="160" height="160" alt={settings.wheelSlots === 5 ? '五项图标轮盘' : '四项图标轮盘'} /></section>
+          <WheelEditor ref={wheelEditor} config={settings} onEditing={active => {
+            if (active && !wheelEditing) { savedScroll.current = scrollRef.current?.scrollTop ?? 0; cancelAnimationFrame(animation.current); navigation.current = 'wheel'; setTab('wheel'); }
+            setWheelEditing(active);
+          }} onBlocking={setWheelBlocking} save={async next => {
+            const persisted = await enqueue(() => api.settings(next));
+            update({ wheelActions: persisted.wheelActions, wheelSlots: persisted.wheelSlots });
+            return persisted;
+          }} />
           {autoFeedback}
       </section>
       <section className="settings-page" id="settings-app" data-section="app" aria-label="应用">

@@ -5,7 +5,8 @@ import { InputBridge } from './inputBridge';
 import { physicalToLocal, type DisplayMap } from './coords';
 import { SettingsStore } from './settings';
 import { configCommand, type HelperEvent } from '../shared/protocol';
-import { isIntent, validRect, type CardState, type Intent, type Point, type StageState, type Target, type TranslationMode, type Turn, type UiEvent } from '../shared/types';
+import { validRect, type CardState, type Intent, type Point, type StageState, type Target, type TranslationMode, type Turn, type UiEvent } from '../shared/types';
+import { isBuiltin, visibleActions, wheelItem, type WheelSize, type WheelSlot } from '../shared/wheel';
 import { answerCardBounds, answerCardSize, pickGestureAction, toPixels, wheelCenter } from '../shared/geometry';
 import { annotateBitmap } from './annotation';
 import { askModel, initialQuestion, messagesFor } from './model';
@@ -30,7 +31,7 @@ else void app.whenReady().then(start).catch(error => { dialog.showErrorBox('ping
 interface Session {
   token: number; id: string; display: Display; origin: Point; cursor: Point; wheelCenter: Point;
   target: Target; capturedAt: string; shot?: Electron.NativeImage; release?: Point; stage?: StageState; card?: CardState;
-  request?: AbortController; requestId: number; intent?: Intent; slots: 4 | 5; image?: string; choosing?: boolean;
+  request?: AbortController; requestId: number; intent?: Intent | 'prompt'; slots: WheelSize; actions: WheelSlot[]; selected?: WheelSlot; image?: string; choosing?: boolean;
   translationMode: TranslationMode; translationRemainder: number;
   modelImages?: { annotated: string; focus: { image: string; rect: import('../shared/types').Rect } };
   cardHeight?: number; cardContentHeight?: number;
@@ -75,7 +76,7 @@ function start(): void {
     win.on('closed', () => { ready.delete(win); syncSuspension(); });
     if (role === 'card') win.on('close', event => { if (!quitting) { event.preventDefault(); closeSession(); } });
     if (role === 'card') win.on('moved', () => { if (!resizingCard && session?.card) resizeCard(session); });
-    if (role === 'settings') win.on('close', event => { if (!quitting) { event.preventDefault(); win.hide(); syncSuspension(); } });
+    if (role === 'settings') win.on('close', event => { if (!quitting) { event.preventDefault(); send(win, { type: 'settingsClose' }); } });
     return win;
   }
   function stageFor(d: Display): BrowserWindow {
@@ -146,16 +147,20 @@ function start(): void {
     if (s.stage?.mode === 'wheel') { s.stage.image = s.image; send(stages.get(s.display.id), { type: 'stage', state: s.stage }); }
   }
   async function showWheel(s: Session): Promise<void> {
-    s.stage = { id: s.id, image: s.image ?? '', width: s.display.bounds.width, height: s.display.bounds.height, origin: s.origin, wheelCenter: s.wheelCenter, cursor: s.cursor, mode: 'wheel', target: s.target, wheelSlots: s.slots, translationMode: s.translationMode };
+    s.stage = { id: s.id, image: s.image ?? '', width: s.display.bounds.width, height: s.display.bounds.height, origin: s.origin, wheelCenter: s.wheelCenter, cursor: s.cursor, mode: 'wheel', target: s.target, wheelSlots: s.slots, actions: s.actions.map(wheelItem), translationMode: s.translationMode };
     const win = stageFor(s.display); await ready.get(win);
     if (!live(s)) return;
     if (s.release || s.card || s.stage?.mode !== 'wheel') return;
     send(win, { type: 'stage', state: s.stage }); win.showInactive(); win.setBounds(s.display.bounds);
   }
   function moveCursor(s: Session, point: Point) {
-    const previous = pickGestureAction(s.cursor, s.origin, s.wheelCenter, s.slots);
+    const previous = pickGestureAction(s.cursor, s.origin, s.wheelCenter, s.actions);
     s.cursor = local(s, point);
-    const action = pickGestureAction(s.cursor, s.origin, s.wheelCenter, s.slots);
+    const action = pickGestureAction(s.cursor, s.origin, s.wheelCenter, s.actions);
+    if (action !== previous && isBuiltin(s.actions.find(a => a.id === previous), 'translate') && isBuiltin(s.actions.find(a => a.id === action), 'translate')) {
+      s.translationMode = 'point';
+      if (s.stage) { s.stage.translationMode = 'point'; send(stages.get(s.display.id), { type: 'translationMode', id: s.id, mode: 'point' }); }
+    }
     if (action !== previous) s.translationRemainder = 0;
     if (s.stage) {
       s.stage.cursor = s.cursor;
@@ -170,12 +175,14 @@ function start(): void {
       const display = point && screen.getAllDisplays().find(d => d.id === point.displayId);
       if (!point || !display) return;
       const origin = { x: point.x, y: point.y };
-      const s: Session = { token: gate.next(), id: randomUUID(), display, origin, cursor: origin, wheelCenter: wheelCenter(origin, display.bounds), target: { kind: 'point', point: origin }, capturedAt: new Date().toISOString(), requestId: 0, slots: store.get().wheelSlots, translationMode: 'point', translationRemainder: 0 };
+      const config = store.get();
+      const s: Session = { token: gate.next(), id: randomUUID(), display, origin, cursor: origin, wheelCenter: wheelCenter(origin, display.bounds), target: { kind: 'point', point: origin }, capturedAt: new Date().toISOString(), requestId: 0, slots: config.wheelSlots, actions: visibleActions(config), translationMode: 'point', translationRemainder: 0 };
       session = s;
       void capture(s).catch(error => { if (live(s)) void showCard(s, 'explain', String((error as Error).message)); });
     } else if (ev.type === 'wheelScroll' && session && !session.card && !session.release && !session.choosing && (!session.stage || session.stage.mode === 'wheel')) {
       const s = session;
-      if (moveCursor(s, ev) !== 'translate') return;
+      const id = moveCursor(s, ev);
+      if (!isBuiltin(s.actions.find(a => a.id === id), 'translate')) return;
       const next = scrollTranslation(s.translationMode, s.translationRemainder, ev.delta);
       s.translationRemainder = next.remainder;
       if (s.translationMode === next.mode) return;
@@ -196,17 +203,26 @@ function start(): void {
   async function choose(s: Session, cursor: Point): Promise<void> {
     if (!live(s) || s.card || s.choosing || (s.stage && s.stage.mode !== 'wheel')) return;
     s.choosing = true;
-    const action = pickGestureAction(cursor, s.origin, s.wheelCenter, s.slots);
+    const id = pickGestureAction(cursor, s.origin, s.wheelCenter, s.actions);
+    const action = s.actions.find(a => a.id === id);
     if (!action) { closeSession(); return; }
-    if (action === 'region') {
+    if (isBuiltin(action, 'region')) {
       s.translationMode = 'point'; s.translationRemainder = 0;
-      s.stage = { id: s.id, image: s.image!, width: s.display.bounds.width, height: s.display.bounds.height, origin: s.origin, wheelCenter: s.wheelCenter, cursor, mode: 'region', target: s.target, wheelSlots: 4 };
+      const regionActions = s.actions.filter(a => !isBuiltin(a, 'region'));
+      s.stage = { id: s.id, image: s.image!, width: s.display.bounds.width, height: s.display.bounds.height, origin: s.origin, wheelCenter: s.wheelCenter, cursor, mode: 'region', target: s.target, wheelSlots: regionActions.length, actions: regionActions.map(wheelItem) };
       const win = stageFor(s.display); await ready.get(win); if (!live(s)) return;
       bridge.send({ type: 'suspend', on: true }); win.setFocusable(true); win.setIgnoreMouseEvents(false);
       send(win, { type: 'stage', state: s.stage }); win.show(); win.focus();
-    } else { await showCard(s, action); if (live(s) && action !== 'custom') void request(s, initialQuestion(action, '', s.translationMode)); }
+    } else { await execute(s, action); }
   }
-  async function showCard(s: Session, intent: Intent, error?: string): Promise<void> {
+  async function execute(s: Session, action: WheelSlot): Promise<void> {
+    if (action.kind === 'builtin' && action.action === 'region') return;
+    s.selected = { ...action };
+    const intent = action.kind === 'prompt' ? 'prompt' : action.action as Intent;
+    await showCard(s, intent);
+    if (live(s) && intent !== 'custom') void request(s, action.kind === 'prompt' ? action.prompt : initialQuestion(intent as Intent, '', s.translationMode));
+  }
+  async function showCard(s: Session, intent: Intent | 'prompt', error?: string): Promise<void> {
     if (!live(s)) return;
     s.intent = intent;
     s.card = { id: s.id, image: s.image ?? '', target: s.shot ? toPixels(s.target, s.display.bounds, s.shot.getSize()) : s.target, intent, capturedAt: s.capturedAt, turns: error ? [{ question: '读取屏幕', answer: '', status: 'error', error }] : [], awaitingQuestion: intent === 'custom' && !error, translationMode: s.translationMode, answerFontSize: store.get().answerFontSize };
@@ -251,7 +267,7 @@ function start(): void {
         const rect = focusRect(target, size);
         s.modelImages = { annotated, focus: { image: s.shot.crop(rect).toDataURL(), rect } };
       }
-      await askModel(store.get(), store.key(), messagesFor(s.modelImages.annotated, size, target, s.card.turns, s.modelImages.focus, s.intent === 'translate' && target.kind === 'point' ? s.translationMode : undefined), controller.signal, text => {
+      await askModel(store.get(), store.key(), messagesFor(s.modelImages.annotated, size, target, s.card.turns, s.modelImages.focus, s.intent === 'translate' && target.kind === 'point' ? s.translationMode : undefined, s.selected?.kind === 'prompt'), controller.signal, text => {
         if (!current()) return;
         turn.answer += text;
         if (!uiTimer) uiTimer = setTimeout(() => { uiTimer = undefined; if (current()) updateCard(s); }, 60);
@@ -324,6 +340,9 @@ function start(): void {
   ipcMain.handle('pingscreen:command', async (event, raw: unknown) => {
     if (!raw || typeof raw !== 'object') return;
     const command = raw as Record<string, unknown>;
+    if (authorized(event.sender, 'settings') && command.type === 'closeSettings') {
+      settingsWindow?.hide(); syncSuspension(); return;
+    }
     if (authorized(event.sender, 'settings') && command.type === 'openLolPing') {
       await shell.openExternal('https://github.com/darrenprx/lolPing'); return;
     }
@@ -339,12 +358,14 @@ function start(): void {
     if (command.type === 'region' && isStage && s.stage?.mode === 'region' && validRect(command.rect)) {
       const r = command.rect;
       if (r.x < 0 || r.y < 0 || r.x + r.width > s.display.bounds.width + 0.5 || r.y + r.height > s.display.bounds.height + 0.5) return;
-      s.target = { kind: 'region', rect: r }; s.stage.target = s.target; s.stage.mode = 'regionIntent'; s.stage.wheelSlots = 4;
+      s.target = { kind: 'region', rect: r }; s.stage.target = s.target; s.stage.mode = 'regionIntent';
       s.stage.wheelCenter = wheelCenter({ x: r.x + r.width / 2, y: r.y + r.height / 2 }, s.display.bounds);
       send(stages.get(s.display.id), { type: 'stage', state: s.stage }); return;
     }
-    if (command.type === 'intent' && isStage && s.stage?.mode === 'regionIntent' && isIntent(command.intent)) {
-      await showCard(s, command.intent); if (live(s) && command.intent !== 'custom') void request(s, initialQuestion(command.intent, '')); return;
+    if (command.type === 'intent' && isStage && s.stage?.mode === 'regionIntent') {
+      const action = s.actions.find(a => a.id === command.slotId && s.stage!.actions.some(item => item.id === a.id));
+      if (action) await execute(s, action);
+      return;
     }
     if (!isCard || !s.card) return;
     if (command.type === 'cardHeight') {
@@ -353,7 +374,7 @@ function start(): void {
     }
     if (command.type === 'stop') stop(s);
     if (command.type === 'question' && typeof command.text === 'string' && command.text.trim() && command.text.length <= 8000 && !s.request) {
-      void request(s, s.card.turns.length ? command.text.trim() : initialQuestion(s.intent!, command.text));
+      void request(s, s.card.turns.length ? command.text.trim() : initialQuestion(s.intent === 'prompt' ? 'custom' : s.intent!, command.text));
     }
     if (command.type === 'retry') {
       if (!s.shot) { closeSession(); return; }
