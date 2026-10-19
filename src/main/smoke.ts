@@ -10,6 +10,8 @@ import { version } from '../../package.json';
 import { runCardLayoutSmoke } from './smokeCardLayout';
 import { runProviderSmoke } from './smokeProviders';
 import { runSettingsInterfaceSmoke } from './smokeSettingsInterface';
+import { defaultWheelActions } from '../shared/wheel';
+import { runWheelSmoke } from './smokeWheel';
 interface SmokeSession { id: string; card?: CardState; stage?: StageState; origin: Point; wheelCenter: Point; release?: Point; translationMode: TranslationMode; display: Display; request?: AbortController }
 export interface Harness { handle(event: HelperEvent): void; getSession(): SmokeSession | undefined; getSettings(): BrowserWindow | undefined; getCard(): BrowserWindow | undefined; getStage(): BrowserWindow | undefined; store: SettingsStore; closeSession(): void }
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -21,7 +23,7 @@ export async function runSmoke(h: Harness): Promise<void> {
   const dir = join(app.getAppPath(), '.tools/smoke', forcedScale ? `dpi-${Math.round(Number(forcedScale)*100)}` : ''); mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir,'progress.log'), 'Starting smoke\n');
   const progress = (text: string) => appendFileSync(join(dir,'progress.log'), text + '\n');
-  const deadline = setTimeout(() => { progress('Global timeout'); app.exit(1); }, 120000);
+  const deadline = setTimeout(() => { progress('Global timeout'); app.exit(1); }, 240000);
   const results: string[] = [];
   const packets: any[] = [];
   let failNextRequest=false;
@@ -29,6 +31,7 @@ export async function runSmoke(h: Harness): Promise<void> {
     let body = ''; for await (const chunk of req) body += chunk;
     const packet = JSON.parse(body); packets.push(packet);
     if(failNextRequest) { failNextRequest=false; res.writeHead(503,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{message:'模拟模型暂时不可用'}}));return; }
+    if(packet.stream===false){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:'非流式回答'}}]}));return;}
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     res.write('data: ' + JSON.stringify({choices:[{delta:{content:'这里是**定位区域**，先看目标本身。'}}]}) + '\n\n');
     await delay(80);
@@ -39,11 +42,18 @@ export async function runSmoke(h: Harness): Promise<void> {
     progress('Server listening');
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('No server');
     progress('Saving fixture settings');
-    h.store.save({ baseUrl: `http://127.0.0.1:${address.port}/v1`, model: 'smoke-vision', clearKey: true, wheelSlots: 5, trigger: 'alt', dragThresholdPx: 8, launchAtStartup: false, stream: true, answerFontSize:16 });
+    h.store.save({ baseUrl: `http://127.0.0.1:${address.port}/v1`, model: 'smoke-vision', clearKey: true, wheelSlots: 5, wheelActions: defaultWheelActions(), trigger: 'alt', dragThresholdPx: 8, launchAtStartup: false, stream: true, answerFontSize:16 });
     progress('Fixture settings saved');
     await until(() => h.getSettings()?.webContents.isLoading() === false, 'settings loaded'); await delay(200);
     progress('Settings loaded');
     const settings = h.getSettings()!;
+    await until(async () => await settings.webContents.executeJavaScript(`document.querySelector('h1')?.textContent`) === '设置', 'settings initialized');
+    if (app.commandLine.hasSwitch('smoke-wheel-only')) {
+      const display=screen.getPrimaryDisplay(),physical=screen.dipToScreenRect(null,display.bounds),origin={x:physical.x+Math.round(physical.width/2),y:physical.y+Math.round(physical.height/2)};
+      await runWheelSmoke(h,{dir,packets,origin,display,failNext:()=>{failNextRequest=true;}});
+      clearTimeout(deadline);writeFileSync(join(dir,'wheel-only-results.json'),JSON.stringify({passed:true},null,2));console.log('WHEEL SMOKE PASSED');server.close();app.quit();return;
+    }
+
     const workArea = screen.getPrimaryDisplay().workArea;
     const initialSettings = settings.getBounds();
     // Forced fractional DPI can round the native framed window's invisible borders by 2–3 DIP.
@@ -134,16 +144,8 @@ export async function runSmoke(h: Harness): Promise<void> {
     await navigateSettings('app');
     await snapshot(settings,join(dir,'settings-reading.png'));
     results.push('Answer font range 14-24/default 16/step 1; rapid automatic saves; persisted reload value; failed save rollback; model drafts isolated');
-    const originalSave=h.store.save.bind(h.store);
-    h.store.save=(raw:unknown)=>{if((raw as any)?.wheelSlots===4)throw new Error('模拟保存失败');return originalSave(raw);};
-    await settings.webContents.executeJavaScript(`document.querySelector('[aria-pressed="false"]').click()`);await delay(180);
-    if(h.store.get().wheelSlots!==5||await settings.webContents.executeJavaScript(`document.querySelector('.layout-options button[aria-pressed=true]').textContent`)!=='五项 · 包含框选') throw new Error('Failed auto-save did not restore the persisted value');
-    if(!(await settings.webContents.executeJavaScript(`document.querySelector('.autosave-message').textContent`)).includes('自动保存失败')) throw new Error('Auto-save failure hidden');
-    h.store.save=originalSave;
-    await settings.webContents.executeJavaScript(`document.querySelector('.layout-options button[aria-pressed=false]').click()`);
-    await until(()=>h.store.get().wheelSlots===4,'automatic wheel layout persistence');
-    await settings.webContents.executeJavaScript(`(()=>{document.querySelector('.layout-options button[aria-pressed=false]').click();const trigger=document.querySelector('[aria-label="触发键"]');trigger.value='alt';trigger.dispatchEvent(new Event('change',{bubbles:true}));const slider=document.querySelector('[aria-label="拖动阈值"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(slider,'8');slider.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[aria-label="开机启动"]').click();})()`);
-    await until(()=>h.store.get().wheelSlots===5&&h.store.get().trigger==='alt'&&h.store.get().dragThresholdPx===8&&!h.store.get().launchAtStartup,'restored automatic settings');
+    await settings.webContents.executeJavaScript(`(()=>{const trigger=document.querySelector('[aria-label="触发键"]');trigger.value='alt';trigger.dispatchEvent(new Event('change',{bubbles:true}));const slider=document.querySelector('[aria-label="拖动阈值"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(slider,'8');slider.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[aria-label="开机启动"]').click();})()`);
+    await until(()=>h.store.get().trigger==='alt'&&h.store.get().dragThresholdPx===8&&!h.store.get().launchAtStartup,'restored automatic settings');
     await editField('input[type=url]',`http://127.0.0.1:${address.port}/v1`);
     await editField('input[placeholder="填写支持图片输入的模型名称"]','unsaved-vision');
     await editField('input[type=password]','test-only-key');
@@ -424,6 +426,8 @@ export async function runSmoke(h: Harness): Promise<void> {
     results.push('Escape closes the card');
     await runCardLayoutSmoke(h, {dir, display:d, origin, readingAnswer, scale:Number(forcedScale)||1});
     results.push('Dynamic native window height, work area limits, session isolation, scroll preservation, close/abort and fixed controls: see dynamic-layout.json');
+    await runWheelSmoke(h, {dir, packets, origin, display:d, failNext:()=>{failNextRequest=true;}});
+    results.push('Custom wheel configuration, stable identity, custom requests, regions, retries and narrow layouts; see wheel-verification.json');
     writeFileSync(join(dir,'results.json'),JSON.stringify({passed:results},null,2));
     clearTimeout(deadline); console.log('SMOKE PASSED: ' + results.join('; ')); h.closeSession(); server.close(); app.quit();
   } catch (error) {

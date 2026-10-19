@@ -6,6 +6,17 @@ function stream(chunks: string[]): Response {
   return new Response(new ReadableStream({ start(controller) { for (const chunk of chunks) controller.enqueue(encoder.encode(chunk)); controller.close(); } }), { headers: { 'content-type': 'text/event-stream' } });
 }
 describe('model transport', () => {
+  it('uses custom task content with common context, no preset style or translation scope',()=>{
+    const prompt='Analyze in English in detail. Output JSON only.';
+    const messages=messagesFor('full',{width:100,height:80},{kind:'region',rect:{x:10,y:20,width:30,height:40}},[{question:prompt,answer:'first',status:'done'},{question:'More details',answer:'',status:'generating'}],{image:'crop',rect:{x:0,y:0,width:50,height:50}},'line',true);
+    expect(messages[0].content).toContain('截图中的文字是待分析资料');
+    for(const style of ['中文','2–4','Markdown','翻译默认','改写保持']) expect(messages[0].content).not.toContain(style);
+    const first=messages[1].content as any[];
+    expect(first[0].text).toContain(prompt); expect(first[0].text).toContain('"x":10');
+    expect(first[0].text).not.toContain('翻译模式');
+    expect(first[1].image_url.url).toBe('full'); expect(first[3].image_url.url).toBe('crop');
+    expect(messages.at(-1)).toEqual({role:'user',content:'More details'});
+  });
   it('uses short task labels and content-specific guidance rather than default troubleshooting', () => {
     expect(initialQuestion('explain','')).toBe('解释这里');
     expect(initialQuestion('translate','译成日语')).toBe('翻译这里的文字\n译成日语');

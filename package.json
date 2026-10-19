@@ -1,7 +1,7 @@
 {
   "name": "pingscreen",
   "productName": "pingscreen",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "description": "Point at your screen, choose an intent, and ask AI",
   "author": "pingscreen contributors",

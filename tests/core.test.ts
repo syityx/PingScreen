@@ -5,6 +5,7 @@ import { physicalToLocal } from '../src/main/coords';
 import { DEFAULTS, endpoint, normalize } from '../src/main/settings';
 import { SessionGate } from '../src/main/sessionGate';
 import { annotateBitmap } from '../src/main/annotation';
+import { defaultWheelActions, visibleActions, type WheelSlot } from '../src/shared/wheel';
 
 describe('content sized answer card', () => {
   it.each([[1920,1032,640,160], [480,800,480,160], [900,120,640,120], [320,200,320,160]])('starts compact in a %s by %s work area', (areaWidth,areaHeight,width,height) => {
@@ -30,6 +31,24 @@ describe('content sized answer card', () => {
   });
 });
 describe('wheel and positioning', () => {
+  it('selects the configured identity for any one to six slot arrangement', () => {
+    const center={x:400,y:300};
+    for(let n=1;n<=6;n++) {
+      const slots=defaultWheelActions().slice(0,n).reverse();
+      slots.forEach((slot,i)=>{
+        const angle=-Math.PI/2+i*2*Math.PI/n;
+        const p={x:center.x+90*Math.cos(angle),y:center.y+90*Math.sin(angle)};
+        expect(pickAction(p,center,slots)).toBe(slot.id);
+      });
+      expect(pickAction(center,center,slots)).toBeNull();
+      expect(pickGestureAction({x:0,y:0},{x:0,y:0},{x:128,y:128},slots)).toBeNull();
+    }
+  });
+  it('filters all visible region entries in order without adding hidden slots',()=>{
+    const actions:WheelSlot[]=defaultWheelActions();
+    actions[1]={id:'region-extra',kind:'builtin',action:'region'};
+    expect(visibleActions({wheelSlots:5,wheelActions:actions},true).map(s=>s.id)).toEqual(['slot-1','slot-3','slot-4']);
+  });
   it('selects the five intents clockwise starting at the top', () => {
     const center = { x: 500, y: 400 };
     ['explain','translate','rewrite','custom','region'].forEach((action, i) => {

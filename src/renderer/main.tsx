@@ -1,9 +1,10 @@
 import React, { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ACTIONS, LABELS, type CardState, type Point, type StageState, type UiEvent, type WheelAction } from '../shared/types';
-import { DEAD_ZONE, pickAction, pickGestureAction, rectBetween, WHEEL_RADIUS } from '../shared/geometry';
+import { type CardState, type Point, type StageState, type UiEvent } from '../shared/types';
+import { pickAction, pickGestureAction, rectBetween } from '../shared/geometry';
 import { Icon } from './Icons';
 import { Settings } from './Settings';
+import { Wheel } from './Wheel';
 import './style.css';
 
 const api = window.pingscreen;
@@ -18,32 +19,6 @@ function Brand({ compact = false }: { compact?: boolean }): React.JSX.Element {
   return <div className={`brand ${compact ? 'compact' : ''}`}><span className="brand-mark"><Icon name="logo" size={compact ? 24 : 28} /></span><div><span>{compact ? 'PingScreen' : 'pingscreen'}</span>{!compact && <p>指向，选择，理解。</p>}</div></div>;
 }
 const errorText = (error: unknown) => String(error instanceof Error ? error.message : error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
-
-function Wheel({ state, cursor, onPick }: { state: StageState; cursor: Point; onPick?: (action: WheelAction | null) => void }): React.JSX.Element {
-  const n = state.wheelSlots, step = 2 * Math.PI / n;
-  const active = state.mode === 'wheel' ? pickGestureAction(cursor, state.origin, state.wheelCenter, n) : pickAction(cursor, state.wheelCenter, n);
-  const polar = (radius: number, angle: number) => [radius * Math.cos(angle), radius * Math.sin(angle)];
-  const sector = (a: number, b: number) => {
-    const p = polar(DEAD_ZONE, a), q = polar(WHEEL_RADIUS, a), r = polar(WHEEL_RADIUS, b), s = polar(DEAD_ZONE, b);
-    return `M${p} L${q} A${WHEEL_RADIUS},${WHEEL_RADIUS} 0 0 1 ${r} L${s} A${DEAD_ZONE},${DEAD_ZONE} 0 0 0 ${p} Z`;
-  };
-  return <svg className="wheel" width="256" height="256" viewBox="-128 -128 256 256" style={{ left: state.wheelCenter.x - 128, top: state.wheelCenter.y - 128 }} aria-label="选择意图">
-    <circle r="119" className="wheel-rim" />
-    {ACTIONS.slice(0, n).map((action, index) => {
-      const angle = -Math.PI / 2 + index * step;
-      const [x, y] = polar(77, angle);
-      const translation = action === 'translate' && state.mode === 'wheel';
-      const label = translation ? `翻译 · ${state.translationMode === 'line' ? '条' : '点'}` : LABELS[action];
-      return <g key={action} data-action={action} className={`slice ${active === action ? 'active' : ''}`} role={onPick ? 'button' : undefined} tabIndex={onPick ? 0 : undefined} aria-label={label} onClick={() => onPick?.(action)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onPick?.(action); } }}>
-        <title>{label}{translation ? ' · 滚轮切换点 / 条' : ''}</title>
-        <path d={sector(angle - step / 2 + 0.015, angle + step / 2 - 0.015)} />
-        <foreignObject x={x - 12} y={y - 12} width="24" height="24"><Icon name={action} size={24} /></foreignObject>
-        {translation && <foreignObject x={x + 16} y={y - 8} width="16" height="16"><Icon name="scroll" size={16} /></foreignObject>}
-      </g>;
-    })}
-    <g className="wheel-cancel" role={onPick ? 'button' : undefined} tabIndex={onPick ? 0 : undefined} aria-label="取消" onClick={() => onPick?.(null)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onPick?.(null); } }}><title>取消</title><circle r="30" /><foreignObject x="-9" y="-9" width="18" height="18"><Icon name="close" size={18} /></foreignObject></g>
-  </svg>;
-}
 
 function Stage(): React.JSX.Element | null {
   const [state, setState] = useState<StageState | null>(null);
@@ -65,8 +40,9 @@ function Stage(): React.JSX.Element | null {
   const position = (event: React.PointerEvent) => ({ x: event.clientX, y: event.clientY });
   const rect = state.target.kind === 'region' ? state.target.rect : start ? rectBetween(start, cursor, state.width, state.height) : null;
   const native = state.mode === 'wheel';
-  const translating = native && pickGestureAction(cursor, state.origin, state.wheelCenter, state.wheelSlots) === 'translate';
-  const active = state.mode === 'wheel' ? pickGestureAction(cursor, state.origin, state.wheelCenter, state.wheelSlots) : pickAction(cursor, state.wheelCenter, state.wheelSlots);
+  const active = state.mode === 'wheel' ? pickGestureAction(cursor, state.origin, state.wheelCenter, state.actions) : pickAction(cursor, state.wheelCenter, state.actions);
+  const activeItem = state.actions.find(item => item.id === active);
+  const translating = native && activeItem?.action === 'translate';
   return <div className={`stage stage-${state.mode}`} onContextMenu={event => { event.preventDefault(); command('close'); }}
     onPointerDown={event => { if (state.mode === 'region' && event.button === 0) { const p = position(event); setStart(p); setCursor(p); event.currentTarget.setPointerCapture(event.pointerId); } }}
     onPointerMove={event => { if (!native) setCursor(position(event)); }}
@@ -79,8 +55,8 @@ function Stage(): React.JSX.Element | null {
     {state.mode === 'region' && <div className="stage-hint"><span className="hint-dot" />拖动框选你关注的区域<span className="hint-key">Esc 取消</span></div>}
     {rect ? <div className="selection-box" style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }} /> : <div className="target-ring" style={{ left: state.origin.x, top: state.origin.y }} />}
     {native && Math.hypot(state.origin.x - state.wheelCenter.x, state.origin.y - state.wheelCenter.y) > 1 && <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}><line x1={state.origin.x} y1={state.origin.y} x2={state.wheelCenter.x} y2={state.wheelCenter.y} stroke="#2878e8" strokeWidth="1" strokeDasharray="3 5" /></svg>}
-    {state.mode !== 'region' && <Wheel state={state} cursor={cursor} onPick={state.mode === 'regionIntent' ? action => action ? command('intent', { intent: action }) : command('close') : undefined} />}
-    {state.mode !== 'region' && <div className="wheel-caption" style={{ left: state.wheelCenter.x, top: Math.min(state.height - 44, state.wheelCenter.y + 132) }}><Icon name={active ?? 'close'} size={16} />{active ? `${LABELS[active]}${translating ? ` · ${state.translationMode === 'line' ? '条' : '点'}` : ''}` : '中心松开取消'}</div>}
+    {state.mode !== 'region' && <Wheel actions={state.actions} activeId={active} center={state.wheelCenter} translationMode={native ? state.translationMode : undefined} onPick={state.mode === 'regionIntent' ? action => action ? command('intent', { slotId: action }) : command('close') : undefined} />}
+    {state.mode !== 'region' && <div className="wheel-caption" style={{ left: state.wheelCenter.x, top: Math.min(state.height - 44, state.wheelCenter.y + 132) }}><Icon name={activeItem?.icon ?? 'close'} size={16} />{active ? `${activeItem?.name}${translating ? ` · ${state.translationMode === 'line' ? '条' : '点'}` : ''}` : '中心松开取消'}</div>}
     {state.mode === 'region' && <div className="selection-crosshair" style={{ left: cursor.x, top: cursor.y }}>＋</div>}
   </div>;
 }
